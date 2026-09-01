@@ -1,7 +1,7 @@
 # Regenerate asset-editor.html from the template with every baked PNG from
-# the AISLE root64 project embedded as a data URI (browsers can't read local
+# the game project embedded as a data URI (browsers can't read local
 # folders from file://). Re-run after any bake so the gallery shows current art.
-param([string]$GameRoot = "C:\side\aisle-m64")
+param([string]$GameRoot = "C:\path\to\game")
 
 $sb = New-Object System.Text.StringBuilder
 $dirs = @(@{ key = "shared"; path = "$GameRoot\assets\shared" })

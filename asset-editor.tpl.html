@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AISLE √64 Asset Editor</title>
+<title>Simple64 Asset Editor</title>
 <style>
   :root { --bg:#0b0d10; --panel:#161a20; --line:#242a33; --ink:#d6dbe0; --acc:#57c7a8; }
   * { box-sizing:border-box; margin:0; }
@@ -29,7 +29,7 @@
 </style>
 </head>
 <body>
-<h1>AISLE √64 — asset editor</h1>
+<h1>Simple64 — asset editor</h1>
 <div class="row">
   <div class="panel">
     <label>asset type (sets canvas size)</label>
@@ -78,7 +78,7 @@
     </select>
     <div id="changed" style="font-size:11px;color:#8a939d;margin-top:6px"></div>
     <label>then bake with</label>
-    <div style="font-size:10px"><code id="bakeCmd">docker run --rm -v C:\side\aisle-m64:/app -w /app aisle8-libdragon:preview bash tools/bake/convert.sh</code>
+    <div style="font-size:10px"><code id="bakeCmd">docker run --rm -v C:\path\to\game:/app -w /app libdragon:preview bash tools/bake/convert.sh</code>
       <button id="bCopyCmd" style="font-size:10px">copy</button></div>
     <label>preview (1x)</label>
     <canvas id="preview"></canvas>
@@ -93,7 +93,7 @@
     <p class="hint">Draw at pixel scale; PNG saves at true asset size.
     Drop finished files into <code>assets/shared/</code> (screens, title) or
     <code>assets/stores/sN/</code> (per-store art), then run:<br>
-    <code>docker run --rm -v C:\side\aisle-m64:/app -w /app aisle8-libdragon:preview bash tools/bake/convert.sh</code><br>
+    <code>docker run --rm -v C:\path\to\game:/app -w /app libdragon:preview bash tools/bake/convert.sh</code><br>
     then <code>make</code> in the same container. Animation frames are
     <code>name&lt;anim&gt;_&lt;frame&gt;</code> (e.g. arcadescr1_2 = anim 1, frame 2;
     anims 0-2, frames 0-3).</p>
