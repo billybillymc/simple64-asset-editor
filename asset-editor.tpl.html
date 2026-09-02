@@ -2,430 +2,1645 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Simple64 Asset Editor</title>
+<title>N64 Asset Editor</title>
 <style>
-  :root { --bg:#0b0d10; --panel:#161a20; --line:#242a33; --ink:#d6dbe0; --acc:#57c7a8; }
+  :root { --bg:#0b0d10; --panel:#161a20; --line:#242a33; --ink:#d6dbe0; --dim:#8a939d;
+          --acc:#57c7a8; --warn:#e0b467; --bad:#e06767; }
   * { box-sizing:border-box; margin:0; }
-  body { background:var(--bg); color:var(--ink); font:14px/1.5 Consolas,monospace; padding:16px; }
-  h1 { font-size:16px; color:var(--acc); margin-bottom:10px; }
-  .row { display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; }
-  label { display:block; font-size:11px; color:#8a939d; margin:8px 0 2px; text-transform:uppercase; }
-  select,input[type=text],button { background:#0e1116; color:var(--ink); border:1px solid var(--line);
-    border-radius:4px; padding:5px 8px; font:inherit; }
-  button { cursor:pointer; } button:hover { border-color:var(--acc); }
-  button.on { border-color:var(--acc); color:var(--acc); }
-  #cwrap { background:#000; border:1px solid var(--line); image-rendering:pixelated; line-height:0;
+  body { background:var(--bg); color:var(--ink); font:14px/1.5 Consolas,ui-monospace,monospace; padding:12px 16px 24px; }
+  h1 { font-size:16px; color:var(--acc); display:inline-block; }
+  header { display:flex; align-items:baseline; gap:14px; margin-bottom:10px; flex-wrap:wrap; }
+  #status { font-size:12px; color:var(--dim); min-height:18px; flex:1; }
+  #status.ok { color:var(--acc); } #status.warn { color:var(--warn); } #status.bad { color:var(--bad); }
+  .row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px 12px 12px; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  label, .lab { display:block; font-size:10px; color:var(--dim); margin:9px 0 3px;
+    text-transform:uppercase; letter-spacing:.06em; }
+  label:first-child, .lab:first-child { margin-top:0; }
+  select,input[type=text],input[type=number],input[type=search],button {
+    background:#0e1116; color:var(--ink); border:1px solid var(--line);
+    border-radius:4px; padding:4px 7px; font:inherit; font-size:13px; }
+  input[type=number] { width:58px; }
+  input[type=color] { width:44px; height:26px; padding:0; border:1px solid var(--line);
+    background:#0e1116; border-radius:4px; vertical-align:middle; }
+  button { cursor:pointer; } button:hover:not(:disabled) { border-color:var(--acc); }
+  button:disabled { opacity:.4; cursor:default; }
+  button.on { border-color:var(--acc); color:var(--acc); background:#12211d; }
+  .btns { display:flex; flex-wrap:wrap; gap:4px; }
+  .btns button { min-width:34px; }
+  .inline { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .chk { font-size:11px; color:var(--dim); text-transform:none; letter-spacing:0;
+    display:inline-flex; align-items:center; gap:4px; margin:0; cursor:pointer; }
+  .chk input { accent-color:var(--acc); }
+  #cwrap { background:#000; border:1px solid var(--line); line-height:0; overflow:auto;
+    max-width:min(72vw,900px); max-height:74vh; resize:both;
     background-image:linear-gradient(45deg,#181818 25%,transparent 25%,transparent 75%,#181818 75%),
       linear-gradient(45deg,#181818 25%,transparent 25%,transparent 75%,#181818 75%);
     background-size:16px 16px; background-position:0 0,8px 8px; }
-  #cv { image-rendering:pixelated; cursor:crosshair; display:block; }
-  .sw { display:inline-block; width:22px; height:22px; border:1px solid var(--line); border-radius:3px;
-    cursor:pointer; vertical-align:middle; margin:2px; }
-  .sw.sel { border:2px solid var(--acc); }
-  .hint { font-size:12px; color:#8a939d; max-width:340px; margin-top:8px; }
-  .hint code { color:var(--acc); }
-  #preview { border:1px solid var(--line); image-rendering:pixelated; background:#000; margin-top:8px; }
+  #cv { image-rendering:pixelated; cursor:crosshair; display:block; touch-action:none; }
+  .sw { display:inline-block; width:20px; height:20px; border:1px solid var(--line); border-radius:3px;
+    cursor:pointer; vertical-align:middle; margin:1px; }
+  .sw.sel { outline:2px solid var(--acc); outline-offset:1px; }
+  #pal { max-width:244px; }
+  .hint { font-size:11px; color:var(--dim); max-width:340px; margin-top:8px; }
+  code { color:var(--acc); font-size:11px; }
+  canvas.pv { image-rendering:pixelated; border:1px solid var(--line); background:#000; display:block; }
+  #warns { font-size:11px; line-height:1.45; margin-top:6px; min-height:16px; }
+  #warns div { color:var(--warn); } #warns div.bad { color:var(--bad); } #warns div.ok { color:var(--acc); }
+  #gallery { max-height:46vh; overflow-y:auto; margin-top:8px; display:flex; flex-wrap:wrap;
+    gap:6px; align-content:flex-start; }
+  .thumb { text-align:center; font-size:9px; color:var(--dim); cursor:pointer; width:72px;
+    border:1px solid transparent; border-radius:3px; padding:2px; overflow:hidden; }
+  .thumb:hover { border-color:var(--line); color:var(--ink); }
+  .thumb.cur { border-color:var(--acc); color:var(--acc); }
+  .thumb img { image-rendering:pixelated; max-width:64px; max-height:52px; background:#000;
+    border:1px solid var(--line); display:block; margin:0 auto; min-height:16px; }
+  .thumb.edited .nm::after { content:" *"; color:var(--acc); }
+  .nm { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sep { height:1px; background:var(--line); margin:10px -12px; }
+  kbd { font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:3px; padding:0 3px; }
+  #keyhelp { font-size:11px; color:var(--dim); columns:2; column-gap:16px; margin-top:6px; }
+  #keyhelp div { break-inside:avoid; }
+  details summary { cursor:pointer; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
 </style>
 </head>
 <body>
-<h1>Simple64 — asset editor</h1>
+<header>
+  <h1>N64 asset editor</h1>
+  <div id="status">ready</div>
+</header>
 <div class="row">
-  <div class="panel">
-    <label>asset type (sets canvas size)</label>
-    <select id="preset">
-      <option value="64x48|arcadescr0_0">arcade / TV screen frame — 64×48</option>
-      <option value="20x48|cover01">cover / product face — 20×48</option>
-      <option value="64x16|marker1">marker / litany plate — 64×16</option>
-      <option value="128x16|banner1">banner — 128×16</option>
-      <option value="32x64|postera">poster / door / standee — 32×64</option>
-      <option value="64x64|floor">floor / wall / ceiling tile — 64×64</option>
-      <option value="64x24|sign0">aisle sign plate — 64×24</option>
-      <option value="128x24|title">title card — 128×24</option>
-    </select>
-    <label>filename</label>
-    <input type="text" id="fname" value="arcadescr0_0" size="22">
-    <label>tools (right-click always erases)</label>
+
+  <!-- ============ left column ============ -->
+  <div class="panel col" style="width:272px">
     <div>
-      <button id="tPen" class="on">pen</button>
-      <button id="tFill">fill</button>
-      <button id="tPick">pick</button>
-      <button id="tClear">clear</button>
-      <button id="tUndo">undo</button>
+      <label>filename (no extension)</label>
+      <input type="text" id="fname" value="untitled" style="width:100%">
+      <label>asset group / save target</label>
+      <select id="saveTarget" style="width:100%"></select>
+      <label>size preset</label>
+      <select id="preset" style="width:100%">
+        <option value="">custom / keep</option>
+        <option value="64x48">arcade / TV screen frame &mdash; 64x48</option>
+        <option value="20x48">cover / product face &mdash; 20x48</option>
+        <option value="64x16">marker / litany plate &mdash; 64x16</option>
+        <option value="128x16">banner &mdash; 128x16</option>
+        <option value="32x64">poster / door / standee &mdash; 32x64</option>
+        <option value="64x64">floor / wall / ceiling tile &mdash; 64x64</option>
+        <option value="64x24">aisle sign plate &mdash; 64x24</option>
+        <option value="128x24">title card &mdash; 128x24</option>
+      </select>
+      <label>canvas size (crop / extend)</label>
+      <div class="inline">
+        <input type="number" id="inW" min="1" max="512" value="64">
+        <span style="color:var(--dim)">x</span>
+        <input type="number" id="inH" min="1" max="512" value="48">
+        <select id="anchor" title="which corner stays put when resizing">
+          <option value="tl">top-left</option><option value="c">center</option>
+          <option value="tr">top-right</option><option value="bl">bottom-left</option>
+          <option value="br">bottom-right</option>
+        </select>
+        <button id="bResize">apply</button>
+      </div>
     </div>
-    <label>color</label>
-    <input type="color" id="color" value="#57c7a8">
-    <div id="pal"></div>
-    <label>file</label>
+
+    <div class="sep"></div>
+
     <div>
-      <button id="bNew">new</button>
-      <button id="bLoad">load png</button>
-      <input type="file" id="fileIn" accept="image/png" style="display:none">
-      <button id="bSave">save png</button>
+      <label>tools <span style="text-transform:none">(right-click = erase)</span></label>
+      <div class="btns" id="tools">
+        <button data-tool="pen" class="on" title="pen (B)">pen</button>
+        <button data-tool="eraser" title="eraser (E)">eras</button>
+        <button data-tool="line" title="line (L)">line</button>
+        <button data-tool="rect" title="rectangle (R) - hold Shift for filled">rect</button>
+        <button data-tool="ellipse" title="ellipse (O) - hold Shift for filled">oval</button>
+        <button data-tool="fill" title="flood fill (G) - hold Shift to replace that color everywhere">fill</button>
+        <button data-tool="pick" title="eyedropper (I) - or hold Alt with any tool">pick</button>
+        <button data-tool="select" title="rectangular select (M) - drag inside the marquee to move it">sel</button>
+      </div>
+      <label>brush <span id="brushLab" style="text-transform:none">1 px</span> &mdash; <kbd>[</kbd> <kbd>]</kbd></label>
+      <input type="range" id="brush" min="1" max="8" value="1" style="width:100%">
     </div>
-    <label>game folder (direct save)</label>
+
     <div>
-      <button id="bConnect">connect assets folder</button>
-      <span id="connState" style="font-size:11px;color:#8a939d">not connected</span>
+      <label>color</label>
+      <div class="inline">
+        <input type="color" id="color" value="#57c7a8">
+        <input type="text" id="colorHex" value="#57c7a8" style="width:80px">
+        <button id="bAddSw" title="add the current color to the palette">+</button>
+        <label class="chk" title="snap every drawn color to the nearest palette entry">
+          <input type="checkbox" id="lockPal"> lock</label>
+      </div>
+      <label>palette <span id="palCount" style="text-transform:none"></span></label>
+      <div id="pal"></div>
+      <div class="btns" style="margin-top:5px">
+        <button id="bExtract" title="replace the palette with the image's own quantized colors">from image</button>
+        <button id="bPalReset" title="restore the default palette">reset</button>
+        <button id="bPalSave" title="download the palette as .json">save</button>
+        <button id="bPalLoad" title="load a .json / .hex / .gpl palette">load</button>
+        <input type="file" id="palFile" accept=".json,.hex,.gpl,.txt" style="display:none">
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:4px">right-click a swatch to remove it</div>
     </div>
-    <label>save into</label>
-    <select id="saveTarget">
-      <option value="shared">shared</option>
-      <option value="s0">s0 VIDEO</option><option value="s1">s1 TOY</option>
-      <option value="s2">s2 GROCERY</option><option value="s3">s3 GAMES</option>
-      <option value="s4">s4 ARCADE</option><option value="s5">s5 MUSIC</option>
-      <option value="s6">s6 COMICS</option><option value="s7">s7 ELECTRONICS</option>
-    </select>
-    <div id="changed" style="font-size:11px;color:#8a939d;margin-top:6px"></div>
-    <label>then bake with</label>
-    <div style="font-size:10px"><code id="bakeCmd">docker run --rm -v C:\path\to\game:/app -w /app libdragon:preview bash tools/bake/convert.sh</code>
-      <button id="bCopyCmd" style="font-size:10px">copy</button></div>
-    <label>preview (1x)</label>
-    <canvas id="preview"></canvas>
-    <label>as baked (<span id="fmtLabel">CI4</span> quantized) — <span id="colorCount"></span></label>
-    <canvas id="baked" style="border:1px solid var(--line);image-rendering:pixelated;background:#000"></canvas>
+
+    <div class="sep"></div>
+
     <div>
-      <select id="fmtSel"><option value="ci4">CI4 (16 colors)</option><option value="ia8">IA8 (16 grays)</option></select>
-      <button id="bExtract">use its 16 colors</button>
-      <label style="display:inline;font-size:11px;text-transform:none">
-        <input type="checkbox" id="lockPal"> lock to palette</label>
+      <label>edit</label>
+      <div class="btns">
+        <button id="bUndo" title="undo (Ctrl+Z)">undo</button>
+        <button id="bRedo" title="redo (Ctrl+Y)">redo</button>
+        <button id="bClear" title="clear the canvas or selection (Del)">clear</button>
+        <button id="bAll" title="select all (Ctrl+A)">all</button>
+        <button id="bNone" title="deselect (Esc)">none</button>
+      </div>
+      <div class="btns" style="margin-top:4px">
+        <button id="bFlipH" title="flip horizontally">flip H</button>
+        <button id="bFlipV" title="flip vertically">flip V</button>
+        <button id="bRot180" title="rotate 180">180</button>
+        <button id="bRot90" title="rotate 90 clockwise (whole image)">90</button>
+        <button id="bCrop" title="crop the canvas to the selection">crop</button>
+        <button id="bTrim" title="crop away fully transparent edges">trim</button>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:4px">
+        arrows nudge &mdash; wraps around when nothing is selected, handy for tiles</div>
     </div>
-    <p class="hint">Draw at pixel scale; PNG saves at true asset size.
-    Drop finished files into <code>assets/shared/</code> (screens, title) or
-    <code>assets/stores/sN/</code> (per-store art), then run:<br>
-    <code>docker run --rm -v C:\path\to\game:/app -w /app libdragon:preview bash tools/bake/convert.sh</code><br>
-    then <code>make</code> in the same container. Animation frames are
-    <code>name&lt;anim&gt;_&lt;frame&gt;</code> (e.g. arcadescr1_2 = anim 1, frame 2;
-    anims 0-2, frames 0-3).</p>
+
+    <div class="sep"></div>
+
+    <div>
+      <label>file</label>
+      <div class="btns">
+        <button id="bNew" title="blank canvas">new</button>
+        <button id="bLoad" title="open a PNG (or drop one on the canvas)">open png</button>
+        <input type="file" id="fileIn" accept="image/png,image/*" style="display:none">
+        <button id="bSave" title="save PNG (Ctrl+S)">save png</button>
+        <button id="bCopyImg" title="copy the image to the clipboard">copy</button>
+        <button id="bRevert" title="reload the asset as it was when opened">revert</button>
+      </div>
+      <label>game folder &mdash; direct save</label>
+      <div class="btns">
+        <button id="bConnect">connect</button>
+        <button id="bScan" disabled title="re-read every PNG from the folder into the browser">rescan</button>
+        <button id="bForget" disabled title="forget the connected folder">forget</button>
+      </div>
+      <div id="connState" style="font-size:11px;color:var(--dim);margin-top:4px">not connected</div>
+      <div id="changed" style="font-size:11px;color:var(--acc);margin-top:4px"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <label>game root (for the bake command)</label>
+      <input type="text" id="gameRoot" value="C:\path\to\game" style="width:100%">
+      <div style="font-size:10px;margin-top:5px;word-break:break-all">
+        <code id="bakeCmd"></code>
+        <button id="bCopyCmd" style="font-size:10px;padding:1px 5px">copy</button>
+      </div>
+    </div>
+
+    <details style="margin-top:10px">
+      <summary>keyboard</summary>
+      <div id="keyhelp">
+        <div><kbd>B</kbd> pen</div><div><kbd>E</kbd> eraser</div>
+        <div><kbd>L</kbd> line</div><div><kbd>R</kbd> rect</div>
+        <div><kbd>O</kbd> oval</div><div><kbd>G</kbd> fill</div>
+        <div><kbd>I</kbd> pick</div><div><kbd>M</kbd> select</div>
+        <div><kbd>Alt</kbd> pick</div><div><kbd>[</kbd><kbd>]</kbd> brush</div>
+        <div><kbd>Ctrl+Z</kbd> undo</div><div><kbd>Ctrl+Y</kbd> redo</div>
+        <div><kbd>Ctrl+C/X/V</kbd> clip</div><div><kbd>Ctrl+A</kbd> all</div>
+        <div><kbd>Ctrl+S</kbd> save</div><div><kbd>Del</kbd> clear</div>
+        <div><kbd>+</kbd><kbd>-</kbd> zoom</div><div><kbd>0</kbd> fit</div>
+        <div><kbd>,</kbd><kbd>.</kbd> prev/next frame</div><div><kbd>Esc</kbd> deselect</div>
+      </div>
+    </details>
   </div>
-  <div class="panel">
+
+  <!-- ============ canvas column ============ -->
+  <div class="panel col">
+    <div class="inline" style="margin-bottom:8px">
+      <button id="zOut" title="zoom out (-)">&minus;</button>
+      <span id="zLab" style="font-size:11px;color:var(--dim);min-width:56px;text-align:center">10x</span>
+      <button id="zIn" title="zoom in (+)">+</button>
+      <button id="zFit" title="fit to view (0)">fit</button>
+      <label class="chk"><input type="checkbox" id="showGrid" checked> grid</label>
+      <label class="chk" title="ghost the asset as it was when opened">
+        <input type="checkbox" id="showRef"> ref</label>
+      <label class="chk" title="ghost the previous animation frame underneath">
+        <input type="checkbox" id="showOnion"> onion</label>
+      <span id="coords" style="font-size:11px;color:var(--dim);margin-left:auto;min-width:130px;text-align:right"></span>
+    </div>
     <div id="cwrap"><canvas id="cv"></canvas></div>
   </div>
-  <div class="panel" style="max-width:360px">
-    <label>asset browser — click a thumbnail to edit it</label>
-    <select id="group"></select>
-    <div id="gallery" style="max-height:520px;overflow-y:auto;margin-top:8px;
-      display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start"></div>
+
+  <!-- ============ right column ============ -->
+  <div class="panel col" style="width:342px">
+    <div>
+      <div class="inline" style="align-items:flex-start">
+        <div>
+          <label>preview 1x</label>
+          <canvas id="preview" class="pv"></canvas>
+        </div>
+        <div>
+          <label>as baked &mdash; <span id="fmtLabel">CI4</span></label>
+          <canvas id="baked" class="pv"></canvas>
+        </div>
+      </div>
+      <div class="inline" style="margin-top:6px">
+        <select id="fmtSel">
+          <option value="ci4">CI4 (16-entry palette)</option>
+          <option value="ia8">IA8 (gray + alpha)</option>
+          <option value="rgba16">RGBA16 (5551)</option>
+          <option value="rgba32">RGBA32 (lossless)</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="dither" checked> dither</label>
+        <button id="bApplyBake" title="write the baked result into the canvas">apply</button>
+      </div>
+      <div id="warns"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <label>animation &mdash; <span id="animInfo" style="text-transform:none">no frame sequence</span></label>
+      <div class="inline">
+        <button id="bPlay" disabled>play</button>
+        <button id="bPrevF" title="previous frame (,)" disabled>&lt;</button>
+        <button id="bNextF" title="next frame (.)" disabled>&gt;</button>
+        <input type="range" id="fps" min="1" max="30" value="8" style="width:80px" title="frames per second">
+        <span id="fpsLab" style="font-size:11px;color:var(--dim)">8 fps</span>
+      </div>
+      <canvas id="anim" class="pv" style="margin-top:6px"></canvas>
+    </div>
+
+    <div class="sep"></div>
+
+    <div>
+      <label>asset browser &mdash; click a thumbnail to edit</label>
+      <div class="inline">
+        <select id="group" style="flex:1"></select>
+        <span id="galCount" style="font-size:11px;color:var(--dim)"></span>
+      </div>
+      <input type="search" id="search" placeholder="filter by name..." style="width:100%;margin-top:6px">
+      <div id="gallery"></div>
+    </div>
   </div>
 </div>
 <script>
+/* Assets baked in by build-editor.ps1 as { "group/name": "data:image/png;base64,..." }.
+   Left empty the editor still works - use "open png" or connect the game folder. */
 const ASSETS = {/*__ASSETS__*/};
+const BUILD_INFO = "/*__BUILD__*/";
+</script>
+<script>
+"use strict";
 (function () {
-  const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
-  const pv = document.getElementById("preview"), pctx = pv.getContext("2d");
-  let W = 64, H = 48, ZOOM = 10, tool = "pen";
-  let pix; // Uint8ClampedArray RGBA
-  const undoStack = [];
-  const PALETTE = ["#57c7a8","#e8262d","#0a3f9e","#2ab24a","#ffd400","#ff7a1a",
-    "#e8eef4","#101018","#8a6f4a","#c9c2b0","#2c4e9c","#b03bc2","#0c0505","#ddd4c2"];
 
-  function alloc() { pix = new Uint8ClampedArray(W * H * 4); }
-  function zoomFit() { ZOOM = Math.max(4, Math.floor(560 / Math.max(W, H * 1.2))); }
+/* ============================ small helpers ============================ */
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const HEXRE = /^#?([0-9a-f]{6})$/i;
+function hex2rgb(h) {
+  const m = HEXRE.exec(String(h).trim());
+  if (!m) return [0, 0, 0];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const rgb2hex = c => "#" + c.map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("");
+const isValidHex = h => HEXRE.test(String(h).trim());
 
-  function repaint() {
-    cv.width = W * ZOOM; cv.height = H * ZOOM;
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const i = (y * W + x) * 4;
-      if (pix[i + 3] === 0) continue;
-      ctx.fillStyle = `rgba(${pix[i]},${pix[i+1]},${pix[i+2]},${pix[i+3]/255})`;
-      ctx.fillRect(x * ZOOM, y * ZOOM, ZOOM, ZOOM);
-    }
+let statusTimer = 0;
+function say(msg, kind) {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = kind || "";
+  clearTimeout(statusTimer);
+  if (kind === "ok" || !kind) statusTimer = setTimeout(() => { if (el.textContent === msg) el.className = ""; }, 4000);
+}
+
+/* ============================ document state ============================ */
+let W = 64, H = 48, ZOOM = 10;
+let pix = new Uint8ClampedArray(W * H * 4);
+let tool = "pen", brush = 1;
+let sel = null;              // {x,y,w,h} selection rect in pixel coords, or null
+let clip = null;             // {w,h,data} clipboard buffer
+let refPix = null;           // pixels as loaded, for "ref" ghost + revert
+let refMeta = null;          // {key,name,group,w,h} of the asset that was opened
+let dirty = false;
+const MAX_UNDO = 150;
+const undoStack = [], redoStack = [];
+
+const DEFAULT_PALETTE = ["#57c7a8", "#e8262d", "#0a3f9e", "#2ab24a", "#ffd400", "#ff7a1a",
+  "#e8eef4", "#101018", "#8a6f4a", "#c9c2b0", "#2c4e9c", "#b03bc2", "#0c0505", "#ddd4c2"];
+let PALETTE = DEFAULT_PALETTE.slice();
+
+const GROUP_LABELS = { shared: "shared (screens, title)", s0: "s0 VIDEO", s1: "s1 TOY",
+  s2: "s2 GROCERY", s3: "s3 GAMES", s4: "s4 ARCADE", s5: "s5 MUSIC", s6: "s6 COMICS",
+  s7: "s7 ELECTRONICS" };
+
+/* Assets seen at runtime: EDITS (saved this session) wins over DISK (read from the
+   connected folder) which wins over ASSETS (baked in at build time). */
+const EDITS = Object.create(null);
+const DISK = Object.create(null);
+const assetURL = k => EDITS[k] || DISK[k] || ASSETS[k] || null;
+function assetKeys() {
+  const s = new Set();
+  for (const k in ASSETS) s.add(k);
+  for (const k in DISK) s.add(k);
+  for (const k in EDITS) s.add(k);
+  return [...s];
+}
+
+const cv = $("cv"), ctx = cv.getContext("2d");
+const pv = $("preview"), pctx = pv.getContext("2d");
+/* 1x scratch canvas: we render pixels into it, then blit scaled (much faster than
+   one fillRect per pixel, and keeps transparency crisp). */
+const sc = document.createElement("canvas"), sctx = sc.getContext("2d");
+
+/* ============================ history ============================ */
+function stateOf() { return { W, H, data: pix.slice(), sel: sel && { ...sel } }; }
+function applyState(s) {
+  W = s.W; H = s.H; pix = s.data; sel = s.sel ? { ...s.sel } : null;
+  syncSizeInputs();
+}
+function snapshot() {
+  undoStack.push(stateOf());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+  markDirty();
+  syncHistoryButtons();
+}
+function syncHistoryButtons() {
+  $("bUndo").disabled = !undoStack.length;
+  $("bRedo").disabled = !redoStack.length;
+}
+function undo() {
+  if (!undoStack.length) return say("nothing to undo");
+  redoStack.push(stateOf());
+  applyState(undoStack.pop());
+  syncHistoryButtons(); markDirty(); repaint();
+}
+function redo() {
+  if (!redoStack.length) return say("nothing to redo");
+  undoStack.push(stateOf());
+  applyState(redoStack.pop());
+  syncHistoryButtons(); markDirty(); repaint();
+}
+
+let autosaveTimer = 0;
+function markDirty() {
+  dirty = true;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(autosave, 1500);
+}
+
+/* ============================ rendering ============================ */
+function alloc(w, h) {
+  W = w != null ? w : W; H = h != null ? h : H;
+  pix = new Uint8ClampedArray(W * H * 4);
+  sel = null;
+  syncSizeInputs();
+}
+function syncSizeInputs() {
+  $("inW").value = W; $("inH").value = H;
+  const m = W + "x" + H;
+  const opt = [...$("preset").options].find(o => o.value === m);
+  $("preset").value = opt ? m : "";
+}
+function zoomFit() {
+  /* Fit to the box the wrapper is allowed to occupy, not to what it currently
+     holds - at boot that is just the canvas element's default 300x150. */
+  const wrap = $("cwrap"), cs = getComputedStyle(wrap);
+  let availW = parseFloat(cs.maxWidth) || 900;
+  let availH = parseFloat(cs.maxHeight) || 600;
+  if (wrap.style.width) availW = Math.min(availW, wrap.clientWidth);   /* dragged the resize grip */
+  if (wrap.style.height) availH = Math.min(availH, wrap.clientHeight);
+  ZOOM = clamp(Math.floor(Math.min((availW - 6) / W, (availH - 6) / H)), 1, 48);
+  syncZoomLabel();
+}
+function syncZoomLabel() { $("zLab").textContent = ZOOM + "x"; }
+
+function pixToCanvas(src, w, h) {
+  sc.width = w; sc.height = h;
+  sctx.putImageData(new ImageData(src.slice(), w, h), 0, 0);
+  return sc;
+}
+
+let onionImg = null;   // HTMLImageElement of the previous animation frame
+
+function repaint() {
+  cv.width = W * ZOOM; cv.height = H * ZOOM;
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  if ($("showOnion").checked && onionImg && onionImg.complete && onionImg.naturalWidth) {
+    ctx.globalAlpha = 0.32;
+    ctx.drawImage(onionImg, 0, 0, cv.width, cv.height);
+    ctx.globalAlpha = 1;
+  }
+  if ($("showRef").checked && refPix && refMeta && refMeta.w === W && refMeta.h === H) {
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(pixToCanvas(refPix, W, H), 0, 0, cv.width, cv.height);
+    ctx.globalAlpha = 1;
+  }
+  ctx.drawImage(pixToCanvas(pix, W, H), 0, 0, cv.width, cv.height);
+
+  if ($("showGrid").checked && ZOOM >= 5) {
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
-    for (let x = 0; x <= W; x++) { ctx.beginPath(); ctx.moveTo(x*ZOOM,0); ctx.lineTo(x*ZOOM,H*ZOOM); ctx.stroke(); }
-    for (let y = 0; y <= H; y++) { ctx.beginPath(); ctx.moveTo(0,y*ZOOM); ctx.lineTo(W*ZOOM,y*ZOOM); ctx.stroke(); }
-    pv.width = W; pv.height = H;
-    pctx.putImageData(new ImageData(pix.slice(), W, H), 0, 0);
-    bakedRender();
-  }
-
-  function snapshot() { undoStack.push(pix.slice()); if (undoStack.length > 40) undoStack.shift(); }
-  function hex2rgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
-
-  /* ---- "as baked": the same 16-color quantize + ordered dither mksprite does ---- */
-  const BAYER = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
-
-  function medianCut16(colors) {
-    let buckets = [colors];
-    while (buckets.length < 16) {
-      buckets.sort((a, b) => b.length - a.length);
-      const bk = buckets.shift();
-      if (bk.length < 2) { buckets.push(bk); break; }
-      let best = 0, bestRange = -1;
-      for (let ch2 = 0; ch2 < 3; ch2++) {
-        let mn = 255, mx = 0;
-        bk.forEach(c => { mn = Math.min(mn, c[ch2]); mx = Math.max(mx, c[ch2]); });
-        if (mx - mn > bestRange) { bestRange = mx - mn; best = ch2; }
-      }
-      bk.sort((a, b) => a[best] - b[best]);
-      const mid = bk.length >> 1;
-      buckets.push(bk.slice(0, mid), bk.slice(mid));
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x++) { ctx.moveTo(x * ZOOM + .5, 0); ctx.lineTo(x * ZOOM + .5, H * ZOOM); }
+    for (let y = 0; y <= H; y++) { ctx.moveTo(0, y * ZOOM + .5); ctx.lineTo(W * ZOOM, y * ZOOM + .5); }
+    ctx.stroke();
+    if (ZOOM >= 8) {                       /* every 8 px, a brighter guide */
+      ctx.strokeStyle = "rgba(255,255,255,0.16)";
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 8) { ctx.moveTo(x * ZOOM + .5, 0); ctx.lineTo(x * ZOOM + .5, H * ZOOM); }
+      for (let y = 0; y <= H; y += 8) { ctx.moveTo(0, y * ZOOM + .5); ctx.lineTo(W * ZOOM, y * ZOOM + .5); }
+      ctx.stroke();
     }
-    return buckets.map(bk => {
-      const s = [0, 0, 0];
-      bk.forEach(c => { s[0] += c[0]; s[1] += c[1]; s[2] += c[2]; });
-      return [Math.round(s[0]/bk.length), Math.round(s[1]/bk.length), Math.round(s[2]/bk.length)];
-    });
+  }
+  if (sel) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#000";
+    ctx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
+    ctx.strokeStyle = "#57c7a8";
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
+    ctx.restore();
   }
 
-  function nearestIn(pal, r, g2, b) {
-    let bi = 0, bd = 1e9;
-    for (let i = 0; i < pal.length; i++) {
-      const d = (pal[i][0]-r)**2 + (pal[i][1]-g2)**2 + (pal[i][2]-b)**2;
-      if (d < bd) { bd = d; bi = i; }
+  pv.width = W; pv.height = H;
+  pctx.putImageData(new ImageData(pix.slice(), W, H), 0, 0);
+  scheduleBake();
+  drawAnimFrame();
+}
+
+/* ============================ color / drawing ============================ */
+function nearestIn(pal, r, g, b) {
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < pal.length; i++) {
+    const dr = pal[i][0] - r, dg = pal[i][1] - g, db = pal[i][2] - b;
+    const d = dr * dr + dg * dg + db * db;
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return pal[bi];
+}
+function currentRGB() {
+  let c = hex2rgb($("color").value);
+  if ($("lockPal").checked && PALETTE.length) c = nearestIn(PALETTE.map(hex2rgb), c[0], c[1], c[2]);
+  return c;
+}
+function setPx(x, y, erase, rgb) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const i = (y * W + x) * 4;
+  if (erase) { pix[i] = pix[i + 1] = pix[i + 2] = pix[i + 3] = 0; return; }
+  pix[i] = rgb[0]; pix[i + 1] = rgb[1]; pix[i + 2] = rgb[2]; pix[i + 3] = 255;
+}
+function stamp(x, y, erase, rgb) {
+  if (brush === 1) return setPx(x, y, erase, rgb);
+  const lo = -((brush - 1) >> 1), hi = brush >> 1;
+  for (let dy = lo; dy <= hi; dy++) for (let dx = lo; dx <= hi; dx++) setPx(x + dx, y + dy, erase, rgb);
+}
+function lineTo(x0, y0, x1, y1, erase, rgb) {
+  let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    stamp(x0, y0, erase, rgb);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+function drawRect(x0, y0, x1, y1, erase, rgb, filled) {
+  const xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  const ya = Math.min(y0, y1), yb = Math.max(y0, y1);
+  if (filled) {
+    for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) setPx(x, y, erase, rgb);
+  } else {
+    lineTo(xa, ya, xb, ya, erase, rgb); lineTo(xa, yb, xb, yb, erase, rgb);
+    lineTo(xa, ya, xa, yb, erase, rgb); lineTo(xb, ya, xb, yb, erase, rgb);
+  }
+}
+function drawEllipse(x0, y0, x1, y1, erase, rgb, filled) {
+  const xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+  const ya = Math.min(y0, y1), yb = Math.max(y0, y1);
+  const cx = (xa + xb) / 2, cy = (ya + yb) / 2;
+  const rx = Math.max(.5, (xb - xa) / 2), ry = Math.max(.5, (yb - ya) / 2);
+  const inside = (x, y, sh) => {
+    const a = rx - sh, b = ry - sh;
+    if (a <= 0 || b <= 0) return false;
+    const u = (x - cx) / a, v = (y - cy) / b;
+    return u * u + v * v <= 1.02;
+  };
+  for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+    if (!inside(x, y, 0)) continue;
+    if (filled || !inside(x, y, 1)) setPx(x, y, erase, rgb);
+  }
+}
+/* transparent pixels compare equal regardless of their leftover RGB */
+function keyAt(i) { return pix[i + 3] === 0 ? -1 : (pix[i] * 65536 + pix[i + 1] * 256 + pix[i + 2]) * 256 + pix[i + 3]; }
+function floodFill(x, y, erase, rgb, global) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const tgt = keyAt((y * W + x) * 4);
+  const rep = erase ? [0, 0, 0, 0] : [rgb[0], rgb[1], rgb[2], 255];
+  const repKey = rep[3] === 0 ? -1 : (rep[0] * 65536 + rep[1] * 256 + rep[2]) * 256 + rep[3];
+  if (tgt === repKey) return;
+  const put = i => { pix[i] = rep[0]; pix[i + 1] = rep[1]; pix[i + 2] = rep[2]; pix[i + 3] = rep[3]; };
+  if (global) {
+    for (let i = 0; i < pix.length; i += 4) if (keyAt(i) === tgt) put(i);
+    return;
+  }
+  const seen = new Uint8Array(W * H);
+  const st = [y * W + x];
+  seen[y * W + x] = 1;
+  while (st.length) {
+    const p = st.pop(), i = p * 4;
+    if (keyAt(i) !== tgt) continue;
+    put(i);
+    const px = p % W, py = (p / W) | 0;
+    if (px > 0 && !seen[p - 1]) { seen[p - 1] = 1; st.push(p - 1); }
+    if (px < W - 1 && !seen[p + 1]) { seen[p + 1] = 1; st.push(p + 1); }
+    if (py > 0 && !seen[p - W]) { seen[p - W] = 1; st.push(p - W); }
+    if (py < H - 1 && !seen[p + W]) { seen[p + W] = 1; st.push(p + W); }
+  }
+}
+
+/* ============================ regions & transforms ============================ */
+const region = () => sel || { x: 0, y: 0, w: W, h: H };
+function extract(r) {
+  const out = new Uint8ClampedArray(r.w * r.h * 4);
+  for (let y = 0; y < r.h; y++) {
+    const src = ((r.y + y) * W + r.x) * 4;
+    out.set(pix.subarray(src, src + r.w * 4), y * r.w * 4);
+  }
+  return { w: r.w, h: r.h, data: out };
+}
+function clearRegion(r, buf) {
+  const b = buf || pix;
+  for (let y = 0; y < r.h; y++) {
+    const i = ((r.y + y) * W + r.x) * 4;
+    b.fill(0, i, i + r.w * 4);
+  }
+}
+function blit(buf, ox, oy, skipTransparent) {
+  for (let y = 0; y < buf.h; y++) {
+    const dy = oy + y;
+    if (dy < 0 || dy >= H) continue;
+    for (let x = 0; x < buf.w; x++) {
+      const dx = ox + x;
+      if (dx < 0 || dx >= W) continue;
+      const s = (y * buf.w + x) * 4, d = (dy * W + dx) * 4;
+      if (skipTransparent && buf.data[s + 3] === 0) continue;
+      pix[d] = buf.data[s]; pix[d + 1] = buf.data[s + 1];
+      pix[d + 2] = buf.data[s + 2]; pix[d + 3] = buf.data[s + 3];
     }
-    return pal[bi];
   }
-
-  function bakedRender() {
-    const bc = document.getElementById("baked"), bctx = bc.getContext("2d");
-    bc.width = W; bc.height = H;
+}
+function transformRegion(kind) {
+  const r = region();
+  const src = extract(r);
+  const out = new Uint8ClampedArray(src.data.length);
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) {
+    let sx = x, sy = y;
+    if (kind === "flipH" || kind === "rot180") sx = r.w - 1 - x;
+    if (kind === "flipV" || kind === "rot180") sy = r.h - 1 - y;
+    const s = (sy * r.w + sx) * 4, d = (y * r.w + x) * 4;
+    out[d] = src.data[s]; out[d + 1] = src.data[s + 1];
+    out[d + 2] = src.data[s + 2]; out[d + 3] = src.data[s + 3];
+  }
+  snapshot();
+  blit({ w: r.w, h: r.h, data: out }, r.x, r.y, false);
+  repaint();
+}
+function rot90() {
+  snapshot();
+  const src = pix, sw = W, sh = H;
+  const out = new Uint8ClampedArray(src.length);
+  for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+    const s = (y * sw + x) * 4, d = (x * sh + (sh - 1 - y)) * 4;
+    out[d] = src[s]; out[d + 1] = src[s + 1]; out[d + 2] = src[s + 2]; out[d + 3] = src[s + 3];
+  }
+  W = sh; H = sw; pix = out; sel = null;
+  syncSizeInputs(); zoomFit(); repaint();
+  say("rotated to " + W + "x" + H, "ok");
+}
+function nudge(dx, dy) {
+  snapshot();
+  if (sel) {
+    const buf = extract(sel);
+    clearRegion(sel);
+    sel.x = clamp(sel.x + dx, -sel.w + 1, W - 1);
+    sel.y = clamp(sel.y + dy, -sel.h + 1, H - 1);
+    blit(buf, sel.x, sel.y, false);
+  } else {                                   /* wrap-around: keeps tiles seamless */
     const out = new Uint8ClampedArray(pix.length);
-    const fmt = document.getElementById("fmtSel").value;
-    const opaque = [];
-    const seen = new Set();
-    for (let i = 0; i < pix.length; i += 4)
-      if (pix[i+3] > 0) {
-        const key = (pix[i]<<16)|(pix[i+1]<<8)|pix[i+2];
-        if (!seen.has(key)) { seen.add(key); opaque.push([pix[i],pix[i+1],pix[i+2]]); }
-      }
-    const cc = document.getElementById("colorCount");
-    cc.textContent = seen.size + "/16 colors";
-    cc.style.color = seen.size > 16 ? "#e06767" : "#8a939d";
-    document.getElementById("fmtLabel").textContent = fmt.toUpperCase();
-    const pal = (fmt === "ci4" && opaque.length > 16) ? medianCut16(opaque) : null;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const i = (y * W + x) * 4;
-      if (pix[i+3] === 0) continue;
-      const dz = (BAYER[y & 3][x & 3] / 16 - 0.5) * 22;
-      let r = pix[i] + dz, g2 = pix[i+1] + dz, b = pix[i+2] + dz;
-      if (fmt === "ia8") {
-        const l = Math.round(Math.max(0, Math.min(255, 0.299*r + 0.587*g2 + 0.114*b)) / 17) * 17;
-        r = g2 = b = l;
-      } else if (pal) {
-        [r, g2, b] = nearestIn(pal, r, g2, b);
-      } else {
-        [r, g2, b] = nearestIn(opaque, r, g2, b);
-      }
-      out[i] = r; out[i+1] = g2; out[i+2] = b; out[i+3] = 255;
+      const sx = ((x - dx) % W + W) % W, sy = ((y - dy) % H + H) % H;
+      const s = (sy * W + sx) * 4, d = (y * W + x) * 4;
+      out[d] = pix[s]; out[d + 1] = pix[s + 1]; out[d + 2] = pix[s + 2]; out[d + 3] = pix[s + 3];
     }
-    bctx.putImageData(new ImageData(out, W, H), 0, 0);
-    bc.style.width = Math.min(256, W * 3) + "px";
+    pix = out;
   }
-
-  function drawColor() {
-    let [r, g2, b] = hex2rgb(document.getElementById("color").value);
-    if (document.getElementById("lockPal").checked) {
-      const pal = PALETTE.map(hex2rgb);
-      [r, g2, b] = nearestIn(pal, r, g2, b);
-    }
-    return [r, g2, b];
-  }
-
-  function setPx(x, y, erase) {
-    if (x < 0 || y < 0 || x >= W || y >= H) return;
-    const i = (y * W + x) * 4;
-    if (erase) { pix[i+3] = 0; return; }
-    const [r,g,b] = drawColor();
-    pix[i] = r; pix[i+1] = g; pix[i+2] = b; pix[i+3] = 255;
-  }
-
-  function fill(x, y, erase) {
-    const i0 = (y * W + x) * 4;
-    const tgt = pix.slice(i0, i0 + 4).join(",");
-    const [r,g,b] = hex2rgb(document.getElementById("color").value);
-    const rep = erase ? [0,0,0,0] : [r,g,b,255];
-    if (tgt === rep.join(",")) return;
-    const st = [[x, y]];
-    while (st.length) {
-      const [cx, cy] = st.pop();
-      if (cx < 0 || cy < 0 || cx >= W || cy >= H) continue;
-      const i = (cy * W + cx) * 4;
-      if (pix.slice(i, i + 4).join(",") !== tgt) continue;
-      pix[i]=rep[0]; pix[i+1]=rep[1]; pix[i+2]=rep[2]; pix[i+3]=rep[3];
-      st.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+  repaint();
+}
+function resizeTo(nw, nh, anchor) {
+  nw = clamp(Math.round(nw) || 1, 1, 512); nh = clamp(Math.round(nh) || 1, 1, 512);
+  if (nw === W && nh === H) return;
+  snapshot();
+  const out = new Uint8ClampedArray(nw * nh * 4);
+  let ox = 0, oy = 0;
+  if (anchor === "c") { ox = ((nw - W) / 2) | 0; oy = ((nh - H) / 2) | 0; }
+  if (anchor === "tr" || anchor === "br") ox = nw - W;
+  if (anchor === "bl" || anchor === "br") oy = nh - H;
+  for (let y = 0; y < H; y++) {
+    const dy = y + oy;
+    if (dy < 0 || dy >= nh) continue;
+    for (let x = 0; x < W; x++) {
+      const dx = x + ox;
+      if (dx < 0 || dx >= nw) continue;
+      const s = (y * W + x) * 4, d = (dy * nw + dx) * 4;
+      out[d] = pix[s]; out[d + 1] = pix[s + 1]; out[d + 2] = pix[s + 2]; out[d + 3] = pix[s + 3];
     }
   }
+  W = nw; H = nh; pix = out; sel = null;
+  syncSizeInputs(); zoomFit(); repaint();
+  say("canvas is now " + W + "x" + H, "ok");
+}
+function opaqueBounds() {
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (pix[(y * W + x) * 4 + 3] === 0) continue;
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+function cropTo(r) {
+  snapshot();
+  const buf = extract(r);
+  W = r.w; H = r.h; pix = buf.data; sel = null;
+  syncSizeInputs(); zoomFit(); repaint();
+  say("cropped to " + W + "x" + H, "ok");
+}
 
-  let drawing = false;
-  cv.addEventListener("contextmenu", e => e.preventDefault());
-  cv.addEventListener("mousedown", e => {
-    const x = Math.floor(e.offsetX / ZOOM), y = Math.floor(e.offsetY / ZOOM);
-    const erase = e.button === 2;
-    if (tool === "pick" && !erase) {
-      const i = (y * W + x) * 4;
-      if (pix[i+3]) document.getElementById("color").value =
-        "#" + [pix[i],pix[i+1],pix[i+2]].map(v => v.toString(16).padStart(2,"0")).join("");
-      return;
+/* ============================ pointer input ============================ */
+let drag = null;    /* {tool,x0,y0,erase,base,moving,lifted,hole,selStart} */
+
+function evPixel(e) {
+  const r = cv.getBoundingClientRect();
+  return [Math.floor((e.clientX - r.left) / ZOOM), Math.floor((e.clientY - r.top) / ZOOM)];
+}
+function pickAt(x, y) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const i = (y * W + x) * 4;
+  if (!pix[i + 3]) return say("that pixel is transparent");
+  setColor(rgb2hex([pix[i], pix[i + 1], pix[i + 2]]));
+}
+const inSel = (x, y) => sel && x >= sel.x && y >= sel.y && x < sel.x + sel.w && y < sel.y + sel.h;
+
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("pointerdown", e => {
+  const [x, y] = evPixel(e);
+  const erase = e.button === 2 || tool === "eraser";
+  if (e.button !== 0 && e.button !== 2) return;
+  cv.setPointerCapture(e.pointerId);
+
+  if (e.altKey || tool === "pick") { pickAt(x, y); return; }
+
+  if (tool === "select") {
+    if (inSel(x, y)) {
+      snapshot();
+      const lifted = extract(sel);
+      const hole = pix.slice();
+      clearRegion(sel, hole);   /* the block leaves clean space behind it */
+      drag = { tool: "move", x0: x, y0: y, lifted, hole, sx: sel.x, sy: sel.y };
+    } else {
+      sel = null;
+      drag = { tool: "marquee", x0: clamp(x, 0, W - 1), y0: clamp(y, 0, H - 1) };
     }
-    snapshot();
-    if (tool === "fill") { fill(x, y, erase); repaint(); return; }
-    drawing = true; setPx(x, y, erase); repaint();
-  });
-  cv.addEventListener("mousemove", e => {
-    if (!drawing) return;
-    setPx(Math.floor(e.offsetX / ZOOM), Math.floor(e.offsetY / ZOOM), e.buttons === 2);
     repaint();
-  });
-  window.addEventListener("mouseup", () => drawing = false);
+    return;
+  }
 
-  const pal = document.getElementById("pal");
-  PALETTE.forEach(c => {
+  const rgb = currentRGB();
+  snapshot();
+  if (tool === "fill") { floodFill(x, y, erase, rgb, e.shiftKey); repaint(); return; }
+  if (tool === "line" || tool === "rect" || tool === "ellipse") {
+    drag = { tool, x0: x, y0: y, erase, rgb, base: pix.slice() };
+    return;
+  }
+  drag = { tool: "pen", x0: x, y0: y, erase, rgb };
+  stamp(x, y, erase, rgb);
+  repaint();
+});
+
+let lastXY = null;
+function showCoords() {
+  const inside = lastXY && lastXY[0] >= 0 && lastXY[1] >= 0 && lastXY[0] < W && lastXY[1] < H;
+  $("coords").textContent = (inside ? lastXY[0] + "," + lastXY[1] : "") +
+    (sel ? "  sel " + sel.w + "x" + sel.h : "");
+}
+cv.addEventListener("pointermove", e => {
+  const [x, y] = evPixel(e);
+  lastXY = [x, y];
+  if (!drag) { showCoords(); return; }
+  if (drag.tool === "pen") {
+    lineTo(drag.x0, drag.y0, x, y, drag.erase, drag.rgb);
+    drag.x0 = x; drag.y0 = y;
+    repaint();
+  } else if (drag.tool === "marquee") {
+    const cx = clamp(x, 0, W - 1), cy = clamp(y, 0, H - 1);
+    sel = { x: Math.min(drag.x0, cx), y: Math.min(drag.y0, cy),
+            w: Math.abs(cx - drag.x0) + 1, h: Math.abs(cy - drag.y0) + 1 };
+    repaint();
+  } else if (drag.tool === "move") {
+    pix.set(drag.hole);
+    sel.x = drag.sx + (x - drag.x0); sel.y = drag.sy + (y - drag.y0);
+    blit(drag.lifted, sel.x, sel.y, false);
+    repaint();
+  } else {
+    pix.set(drag.base);
+    const filled = e.shiftKey;
+    if (drag.tool === "line") lineTo(drag.x0, drag.y0, x, y, drag.erase, drag.rgb);
+    if (drag.tool === "rect") drawRect(drag.x0, drag.y0, x, y, drag.erase, drag.rgb, filled);
+    if (drag.tool === "ellipse") drawEllipse(drag.x0, drag.y0, x, y, drag.erase, drag.rgb, filled);
+    repaint();
+  }
+  showCoords();          /* after the drag, so a new marquee reports its size at once */
+});
+
+function endDrag() {
+  if (drag && drag.tool === "marquee" && sel && sel.w * sel.h <= 1) sel = null;
+  drag = null;
+  showCoords();
+  repaint();
+}
+cv.addEventListener("pointerup", endDrag);
+cv.addEventListener("pointercancel", endDrag);
+cv.addEventListener("pointerleave", () => { if (!drag) { lastXY = null; showCoords(); } });
+
+/* drop a PNG straight onto the canvas */
+["dragover", "drop"].forEach(t => $("cwrap").addEventListener(t, e => {
+  e.preventDefault();
+  if (t === "drop" && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+}));
+
+/* ============================ palette UI ============================ */
+function setColor(hex) {
+  if (!isValidHex(hex)) return;
+  hex = hex.trim();
+  if (hex[0] !== "#") hex = "#" + hex;
+  hex = hex.toLowerCase();
+  $("color").value = hex;
+  $("colorHex").value = hex;
+  [...$("pal").children].forEach(s => s.classList.toggle("sel", s.dataset.c === hex));
+}
+function renderPalette() {
+  const pal = $("pal");
+  pal.innerHTML = "";
+  PALETTE.forEach((c, idx) => {
     const s = document.createElement("span");
-    s.className = "sw"; s.style.background = c;
-    s.onclick = () => { document.getElementById("color").value = c;
-      pal.querySelectorAll(".sw").forEach(x => x.classList.remove("sel")); s.classList.add("sel"); };
+    s.className = "sw";
+    s.style.background = c;
+    s.dataset.c = c;
+    s.title = c + "  (right-click to remove)";
+    s.onclick = () => setColor(c);
+    s.oncontextmenu = e => {
+      e.preventDefault();
+      PALETTE.splice(idx, 1);
+      savePrefs(); renderPalette();
+    };
     pal.appendChild(s);
   });
+  $("palCount").textContent = PALETTE.length + (PALETTE.length > 16 ? " (over 16!)" : "");
+  $("palCount").style.color = PALETTE.length > 16 ? "var(--warn)" : "var(--dim)";
+  setColor($("color").value);
+}
 
-  function setTool(t, btn) {
-    tool = t;
-    ["tPen","tFill","tPick"].forEach(id => document.getElementById(id).classList.remove("on"));
-    btn.classList.add("on");
+/* ============================ format simulation ============================ */
+/* Mirrors what mksprite does closely enough to catch surprises before a bake:
+   CI4 = 16-entry RGBA5551 palette (one entry goes to transparency if used),
+   IA8 = 4-bit intensity + 4-bit alpha, RGBA16 = 5551 direct color. */
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const q5 = v => { const n = clamp(Math.round(v), 0, 255) >> 3; return (n << 3) | (n >> 2); };
+const q4 = v => { const n = clamp(Math.round(v), 0, 255) >> 4; return (n << 4) | n; };
+
+function medianCut(colors, want) {
+  if (colors.length <= want) return colors.map(c => c.slice());
+  let buckets = [colors];
+  while (buckets.length < want) {
+    buckets.sort((a, b) => b.length - a.length);
+    const bk = buckets.shift();
+    if (bk.length < 2) { buckets.push(bk); break; }
+    let best = 0, bestRange = -1;
+    for (let ch = 0; ch < 3; ch++) {
+      let mn = 255, mx = 0;
+      for (const c of bk) { if (c[ch] < mn) mn = c[ch]; if (c[ch] > mx) mx = c[ch]; }
+      if (mx - mn > bestRange) { bestRange = mx - mn; best = ch; }
+    }
+    bk.sort((a, b) => a[best] - b[best]);
+    const mid = bk.length >> 1;
+    buckets.push(bk.slice(0, mid), bk.slice(mid));
   }
-  document.getElementById("tPen").onclick = e => setTool("pen", e.target);
-  document.getElementById("tFill").onclick = e => setTool("fill", e.target);
-  document.getElementById("tPick").onclick = e => setTool("pick", e.target);
-  document.getElementById("tClear").onclick = () => { snapshot(); alloc(); repaint(); };
-  document.getElementById("tUndo").onclick = () => {
-    if (undoStack.length) { pix = undoStack.pop(); repaint(); } };
+  return buckets.map(bk => {
+    const s = [0, 0, 0];
+    for (const c of bk) { s[0] += c[0]; s[1] += c[1]; s[2] += c[2]; }
+    return [Math.round(s[0] / bk.length), Math.round(s[1] / bk.length), Math.round(s[2] / bk.length)];
+  });
+}
+function analyze() {
+  const seen = new Set(), colors = [];
+  let transparent = 0, partial = 0;
+  for (let i = 0; i < pix.length; i += 4) {
+    const a = pix[i + 3];
+    if (a === 0) { transparent++; continue; }
+    if (a < 255) partial++;
+    const key = (pix[i] << 16) | (pix[i + 1] << 8) | pix[i + 2];
+    if (!seen.has(key)) { seen.add(key); colors.push([pix[i], pix[i + 1], pix[i + 2]]); }
+  }
+  return { colors, transparent, partial };
+}
+function bakeCompute(fmt, useDither) {
+  const { colors, transparent } = analyze();
+  const budget = transparent ? 15 : 16;                 /* CI4: transparency eats an entry */
+  const pal = (fmt === "ci4" && colors.length)
+    ? medianCut(colors, budget).map(c => [q5(c[0]), q5(c[1]), q5(c[2])]) : null;
+  const out = new Uint8ClampedArray(pix.length);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    const a = pix[i + 3];
+    if (a === 0) continue;
+    const dz = useDither ? (BAYER[y & 3][x & 3] / 16 - 0.5) * 20 : 0;
+    let r = pix[i] + dz, g = pix[i + 1] + dz, b = pix[i + 2] + dz, oa = 255;
+    if (fmt === "ia8") {
+      const l = q4(clamp(0.299 * r + 0.587 * g + 0.114 * b, 0, 255));
+      r = g = b = l; oa = q4(a);
+    } else if (fmt === "rgba32") {
+      r = pix[i]; g = pix[i + 1]; b = pix[i + 2]; oa = a;
+    } else if (fmt === "rgba16") {
+      r = q5(r); g = q5(g); b = q5(b); oa = a >= 128 ? 255 : 0;
+    } else if (pal) {
+      const c = nearestIn(pal, clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255));
+      r = c[0]; g = c[1]; b = c[2];
+      oa = a >= 128 ? 255 : 0;              /* CI4/RGBA5551 alpha is 1 bit */
+    }
+    out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = oa;
+  }
+  return out;
+}
+let bakeTimer = 0;
+function scheduleBake() { clearTimeout(bakeTimer); bakeTimer = setTimeout(bakedRender, 90); }
+function bakedRender() {
+  const fmt = $("fmtSel").value;
+  const bc = $("baked"), bctx = bc.getContext("2d");
+  const out = bakeCompute(fmt, $("dither").checked);
+  bc.width = W; bc.height = H;
+  bctx.putImageData(new ImageData(out, W, H), 0, 0);
+  const s = clamp(Math.floor(256 / W), 1, 4);
+  bc.style.width = (W * s) + "px"; bc.style.height = (H * s) + "px";
+  $("fmtLabel").textContent = fmt.toUpperCase();
+  renderWarnings(fmt);
+}
+function renderWarnings(fmt) {
+  const { colors, transparent, partial } = analyze();
+  const w = $("warns");
+  w.innerHTML = "";
+  const add = (txt, cls) => { const d = document.createElement("div"); d.textContent = txt; if (cls) d.className = cls; w.appendChild(d); };
 
-  document.getElementById("preset").onchange = e => {
-    const [size, name] = e.target.value.split("|");
-    [W, H] = size.split("x").map(Number);
-    document.getElementById("fname").value = name;
-    undoStack.length = 0; alloc(); zoomFit(); repaint();
+  if (fmt === "ci4") {
+    const budget = transparent ? 15 : 16;
+    const over = colors.length > budget;
+    add(colors.length + "/" + budget + " colors" + (transparent ? " (+1 entry for transparency)" : "") +
+        (over ? " - the bake will merge some" : " - fits"), over ? "bad" : "ok");
+    if (W % 2) add("width " + W + " is odd; CI4 packs 2 pixels per byte, so mksprite pads it");
+  } else if (fmt === "ia8") {
+    add("grayscale: 16 intensity x 16 alpha levels", "ok");
+    if (colors.length > 1) {
+      const chroma = colors.some(c => Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]) > 12);
+      if (chroma) add("this image has real color - IA8 throws all of it away");
+    }
+  } else if (fmt === "rgba16") {
+    add("5 bits per channel, 1-bit alpha", "ok");
+  } else {
+    add("no quantization, 4 bytes per pixel", "ok");
+  }
+  if (partial) add(partial + " pixel" + (partial > 1 ? "s have" : " has") + " partial alpha; " +
+    (fmt === "ia8" ? "IA8 keeps it" : "this format snaps it to on/off"));
+
+  const bpp = { ci4: 0.5, ia8: 1, rgba16: 2, rgba32: 4 }[fmt];
+  const bytes = Math.ceil(W * H * bpp);
+  add(W + "x" + H + " = " + bytes + " B" + (fmt === "ci4" ? " + 32 B palette" : "") +
+      (bytes > 4096 ? " - over one 4KB TMEM load, so it draws as multiple tiles" : ""));
+  if (refMeta && (refMeta.w !== W || refMeta.h !== H))
+    add("size changed from " + refMeta.w + "x" + refMeta.h + " - other code may expect the old size");
+}
+
+/* ============================ animation frames ============================ */
+/* names look like base<anim>_<frame> (arcadescr1_2) or base<frame> (tvstatic3) */
+function frameSet(name, group) {
+  let m = /^(.*[^_])_(\d+)$/.exec(name), prefix, sep;
+  if (m) { prefix = m[1]; sep = "_"; }
+  else { m = /^(.*?)(\d+)$/.exec(name); if (!m || !m[1]) return null; prefix = m[1]; sep = ""; }
+  const re = new RegExp("^" + prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + sep + "(\\d+)$");
+  const frames = [];
+  for (const k of assetKeys()) {
+    const slash = k.indexOf("/");
+    if (k.slice(0, slash) !== group) continue;
+    const nm = k.slice(slash + 1);
+    const fm = re.exec(nm);
+    if (fm) frames.push({ key: k, name: nm, n: parseInt(fm[1], 10) });
+  }
+  if (frames.length < 2) return null;
+  frames.sort((a, b) => a.n - b.n);
+  return { prefix: prefix + sep, frames };
+}
+const imgCache = new Map();
+function imgFor(key) {
+  const url = assetURL(key);
+  if (!url) return null;
+  let rec = imgCache.get(key);
+  if (!rec || rec.url !== url) {
+    const im = new Image();
+    im.onload = () => { if (animSeq) drawAnimFrame(); };
+    im.src = url;
+    rec = { url, im };
+    imgCache.set(key, rec);
+  }
+  return rec.im;
+}
+let animSeq = null, animIdx = 0, animTimer = 0;
+function refreshAnim() {
+  const name = $("fname").value.trim(), group = $("saveTarget").value;
+  animSeq = frameSet(name, group);
+  const info = $("animInfo");
+  const has = !!animSeq;
+  ["bPlay", "bPrevF", "bNextF"].forEach(id => $(id).disabled = !has);
+  if (!has) {
+    info.textContent = "no frame sequence";
+    onionImg = null; stopAnim();
+    const ac = $("anim"); ac.width = 1; ac.height = 1; ac.style.width = "0px";
+    return;
+  }
+  const i = animSeq.frames.findIndex(f => f.name === name);
+  animIdx = i < 0 ? 0 : i;
+  info.textContent = animSeq.prefix + "* - " + animSeq.frames.length + " frames" +
+    (i < 0 ? "" : " (editing #" + animSeq.frames[i].n + ")");
+  updateOnion();
+  drawAnimFrame();
+}
+function updateOnion() {
+  onionImg = null;
+  if (!animSeq) return;
+  const cur = $("fname").value.trim();
+  const i = animSeq.frames.findIndex(f => f.name === cur);
+  if (i > 0) onionImg = imgFor(animSeq.frames[i - 1].key);
+  else if (i === 0 && animSeq.frames.length > 1) onionImg = imgFor(animSeq.frames[animSeq.frames.length - 1].key);
+}
+function drawAnimFrame() {
+  if (!animSeq) return;
+  const ac = $("anim"), actx = ac.getContext("2d");
+  const s = clamp(Math.floor(320 / W), 1, 4);
+  ac.width = W * s; ac.height = H * s;
+  ac.style.width = ac.width + "px";
+  actx.imageSmoothingEnabled = false;
+  actx.clearRect(0, 0, ac.width, ac.height);
+  const f = animSeq.frames[animIdx];
+  if (!f) return;
+  if (f.name === $("fname").value.trim()) {
+    actx.drawImage(pixToCanvas(pix, W, H), 0, 0, ac.width, ac.height);
+  } else {
+    const im = imgFor(f.key);
+    if (im && im.complete && im.naturalWidth) actx.drawImage(im, 0, 0, ac.width, ac.height);
+  }
+}
+function stopAnim() { clearInterval(animTimer); animTimer = 0; $("bPlay").textContent = "play"; $("bPlay").classList.remove("on"); }
+function playAnim() {
+  if (!animSeq) return;
+  stopAnim();
+  $("bPlay").textContent = "stop"; $("bPlay").classList.add("on");
+  animTimer = setInterval(() => {
+    animIdx = (animIdx + 1) % animSeq.frames.length;
+    drawAnimFrame();
+  }, 1000 / (+$("fps").value || 8));
+}
+function stepFrame(d) {
+  if (!animSeq) return;
+  stopAnim();
+  animIdx = (animIdx + d + animSeq.frames.length) % animSeq.frames.length;
+  drawAnimFrame();
+}
+
+/* ============================ open / save ============================ */
+function confirmDiscard() {
+  return !dirty || confirm("The current image has unsaved changes. Discard them?");
+}
+function adoptImage(img, name, group, key) {
+  W = img.naturalWidth || img.width; H = img.naturalHeight || img.height;
+  const t = document.createElement("canvas");
+  t.width = W; t.height = H;
+  const tc = t.getContext("2d", { willReadFrequently: true });
+  tc.drawImage(img, 0, 0);
+  pix = new Uint8ClampedArray(tc.getImageData(0, 0, W, H).data);
+  refPix = pix.slice();
+  refMeta = { key: key || null, name, group: group || null, w: W, h: H };
+  if (name) $("fname").value = name;
+  if (group) $("saveTarget").value = group;
+  undoStack.length = 0; redoStack.length = 0; sel = null; dirty = false;
+  syncHistoryButtons(); syncSizeInputs(); zoomFit(); refreshAnim(); repaint(); paintGallery();
+}
+function loadFile(file) {
+  if (!file || !/image\//.test(file.type)) return say("that is not an image file", "bad");
+  if (!confirmDiscard()) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    adoptImage(img, file.name.replace(/\.[a-z0-9]+$/i, ""), null, null);
+    URL.revokeObjectURL(url);
+    say("opened " + file.name + " (" + W + "x" + H + ")", "ok");
   };
-
-  document.getElementById("bNew").onclick = () => { undoStack.length = 0; alloc(); repaint(); };
-  document.getElementById("bLoad").onclick = () => document.getElementById("fileIn").click();
-  document.getElementById("fileIn").onchange = e => {
-    const f = e.target.files[0]; if (!f) return;
-    const img = new Image();
-    img.onload = () => {
-      W = img.width; H = img.height;
-      const t = document.createElement("canvas"); t.width = W; t.height = H;
-      const tc = t.getContext("2d"); tc.drawImage(img, 0, 0);
-      pix = new Uint8ClampedArray(tc.getImageData(0, 0, W, H).data);
-      document.getElementById("fname").value = f.name.replace(/\.png$/i, "");
-      undoStack.length = 0; zoomFit(); repaint();
-    };
-    img.src = URL.createObjectURL(f);
-  };
-  /* ---- direct save into the game's assets folder (File System Access) ---- */
-  let gameDir = null;
-  const savedList = [];
-
-  document.getElementById("bConnect").onclick = async () => {
+  img.onerror = () => { URL.revokeObjectURL(url); say("could not decode that image", "bad"); };
+  img.src = url;
+}
+function openAsset(key) {
+  if (!confirmDiscard()) return;
+  const url = assetURL(key);
+  if (!url) return say("asset " + key + " is not loaded", "bad");
+  const slash = key.indexOf("/");
+  const group = key.slice(0, slash), name = key.slice(slash + 1);
+  const img = new Image();
+  img.onload = () => { adoptImage(img, name, group, key); say("editing " + key + " (" + W + "x" + H + ")", "ok"); };
+  img.onerror = () => say("could not decode " + key, "bad");
+  img.src = url;
+}
+function toBlob() {
+  const t = document.createElement("canvas");
+  t.width = W; t.height = H;
+  t.getContext("2d").putImageData(new ImageData(pix.slice(), W, H), 0, 0);
+  return new Promise(res => t.toBlob(res, "image/png"));
+}
+function toDataURL() {
+  const t = document.createElement("canvas");
+  t.width = W; t.height = H;
+  t.getContext("2d").putImageData(new ImageData(pix.slice(), W, H), 0, 0);
+  return t.toDataURL("image/png");
+}
+function validName() {
+  const n = $("fname").value.trim();
+  if (!n) { say("give the file a name first", "bad"); return null; }
+  if (!/^[A-Za-z0-9_.-]+$/.test(n)) { say("use only letters, digits, _ . - in asset names", "bad"); return null; }
+  return n;
+}
+async function doSave() {
+  const name = validName();
+  if (!name) return;
+  const group = $("saveTarget").value;
+  const blob = await toBlob();
+  const key = group + "/" + name;
+  if (gameDir) {
     try {
-      gameDir = await window.showDirectoryPicker();
-      document.getElementById("connState").textContent = "connected: " + gameDir.name;
-    } catch (e) {
-      document.getElementById("connState").textContent = "picker blocked - using downloads";
-    }
-  };
-
-  document.getElementById("bCopyCmd").onclick = () =>
-    navigator.clipboard.writeText(document.getElementById("bakeCmd").textContent);
-
-  async function saveDirect(name, blob) {
-    const target = document.getElementById("saveTarget").value;
-    let dir = gameDir;
-    if (target === "shared") dir = await dir.getDirectoryHandle("shared", { create: true });
-    else {
-      dir = await dir.getDirectoryHandle("stores", { create: true });
-      dir = await dir.getDirectoryHandle(target, { create: true });
-    }
-    const fh = await dir.getFileHandle(name + ".png", { create: true });
-    const w2 = await fh.createWritable();
-    await w2.write(blob);
-    await w2.close();
-    savedList.push(target + "/" + name);
-    document.getElementById("changed").textContent = "saved: " + savedList.join(", ");
-  }
-
-  document.getElementById("bSave").onclick = () => {
-    const t = document.createElement("canvas"); t.width = W; t.height = H;
-    t.getContext("2d").putImageData(new ImageData(pix.slice(), W, H), 0, 0);
-    const name = document.getElementById("fname").value;
-    if (gameDir) {
-      t.toBlob(b => saveDirect(name, b).catch(() => alert("direct save failed")), "image/png");
+      await saveDirect(group, name, blob);
+      EDITS[key] = toDataURL();
+      dirty = false;
+      refPix = pix.slice(); refMeta = { key, name, group, w: W, h: H };
+      savedList.add(key);
+      $("changed").textContent = "saved this session: " + [...savedList].join(", ");
+      say("wrote " + key + ".png into the game folder", "ok");
+      paintGallery(); refreshAnim();
       return;
+    } catch (err) {
+      say("direct save failed (" + (err && err.message ? err.message : err) + ") - downloading instead", "warn");
     }
-    const a = document.createElement("a");
-    a.download = name + ".png";
-    a.href = t.toDataURL("image/png");
-    a.click();
-  };
-
-  document.getElementById("fmtSel").onchange = bakedRender;
-  document.getElementById("bExtract").onclick = () => {
-    const opaque = [];
-    const seen = new Set();
-    for (let i = 0; i < pix.length; i += 4)
-      if (pix[i+3] > 0) {
-        const key = (pix[i]<<16)|(pix[i+1]<<8)|pix[i+2];
-        if (!seen.has(key)) { seen.add(key); opaque.push([pix[i],pix[i+1],pix[i+2]]); }
-      }
-    if (!opaque.length) return;
-    const pal16 = opaque.length > 16 ? medianCut16(opaque) : opaque;
-    PALETTE.length = 0;
-    pal16.forEach(c => PALETTE.push(
-      "#" + c.map(v => v.toString(16).padStart(2, "0")).join("")));
-    pal.innerHTML = "";
-    PALETTE.forEach(c => {
-      const s = document.createElement("span");
-      s.className = "sw"; s.style.background = c;
-      s.onclick = () => { document.getElementById("color").value = c;
-        pal.querySelectorAll(".sw").forEach(x => x.classList.remove("sel")); s.classList.add("sel"); };
-      pal.appendChild(s);
-    });
-  };
-
-  /* ---- embedded asset gallery ---- */
-  function loadDataURI(uri, name) {
-    const img = new Image();
-    img.onload = () => {
-      W = img.width; H = img.height;
-      const t = document.createElement("canvas"); t.width = W; t.height = H;
-      const tc = t.getContext("2d"); tc.drawImage(img, 0, 0);
-      pix = new Uint8ClampedArray(tc.getImageData(0, 0, W, H).data);
-      document.getElementById("fname").value = name;
-      undoStack.length = 0; zoomFit(); repaint();
-    };
-    img.src = uri;
   }
-  const groupSel = document.getElementById("group");
-  const gallery = document.getElementById("gallery");
-  const GROUP_LABELS = { shared: "shared (screens, title)", s0: "s0 VIDEO",
-    s1: "s1 TOY", s2: "s2 GROCERY", s3: "s3 GAMES", s4: "s4 ARCADE",
-    s5: "s5 MUSIC", s6: "s6 COMICS", s7: "s7 ELECTRONICS" };
-  const groups = [...new Set(Object.keys(ASSETS).map(k => k.split("/")[0]))];
+  const a = document.createElement("a");
+  a.download = name + ".png";
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  EDITS[key] = toDataURL();
+  dirty = false;
+  say("downloaded " + name + ".png - move it into assets/" + (group === "shared" ? "shared" : "stores/" + group), "ok");
+  paintGallery(); refreshAnim();
+}
+
+/* ---- File System Access: write straight into the game's assets folder ---- */
+let gameDir = null;
+const savedList = new Set();
+
+function idb(mode, fn) {
+  return new Promise((res, rej) => {
+    let req;
+    try { req = indexedDB.open("n64ae", 1); } catch (e) { return rej(e); }
+    req.onupgradeneeded = () => req.result.createObjectStore("kv");
+    req.onerror = () => rej(req.error);
+    req.onsuccess = () => {
+      const st = req.result.transaction("kv", mode).objectStore("kv");
+      const r = fn(st);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    };
+  });
+}
+const idbGet = k => idb("readonly", s => s.get(k));
+const idbSet = (k, v) => idb("readwrite", s => s.put(v, k));
+const idbDel = k => idb("readwrite", s => s.delete(k));
+
+/* The user may pick the game root or the assets folder itself - accept both. */
+async function normalizeDir(dir) {
+  try {
+    const sub = await dir.getDirectoryHandle("assets");
+    return sub;
+  } catch (e) { return dir; }
+}
+function setConnected(dir) {
+  gameDir = dir;
+  const on = !!dir;
+  $("connState").textContent = on ? "connected: " + dir.name + " (saves write straight into it)" : "not connected";
+  $("connState").style.color = on ? "var(--acc)" : "var(--dim)";
+  $("bScan").disabled = !on;
+  $("bForget").disabled = !on;
+  $("bConnect").textContent = on ? "reconnect" : "connect";
+}
+async function connectFolder() {
+  if (!window.showDirectoryPicker) {
+    say("this browser has no folder access - Chrome or Edge required; saves will download instead", "warn");
+    return;
+  }
+  try {
+    const picked = await window.showDirectoryPicker({ mode: "readwrite", id: "n64assets" });
+    const dir = await normalizeDir(picked);
+    setConnected(dir);
+    try { await idbSet("gameDir", dir); } catch (e) { /* private mode: just don't remember it */ }
+    say("connected to " + dir.name + " - hit rescan to load its art", "ok");
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    say("folder picker unavailable (" + (err && err.name) + ") - saves will download instead", "warn");
+  }
+}
+async function restoreFolder() {
+  let dir;
+  try { dir = await idbGet("gameDir"); } catch (e) { return; }
+  if (!dir) return;
+  try {
+    const p = await dir.queryPermission({ mode: "readwrite" });
+    if (p === "granted") { setConnected(dir); say("reconnected to " + dir.name, "ok"); }
+    else {
+      $("connState").textContent = "folder remembered - click connect to re-authorize";
+      $("bConnect").textContent = "reconnect";
+      $("bConnect").onclick = async () => {
+        try {
+          if (await dir.requestPermission({ mode: "readwrite" }) === "granted") { setConnected(dir); return; }
+        } catch (e) { /* fall through to a fresh pick */ }
+        $("bConnect").onclick = connectFolder;
+        connectFolder();
+      };
+    }
+  } catch (e) { /* handle went stale */ }
+}
+async function groupDir(group, create) {
+  if (group === "shared") return gameDir.getDirectoryHandle("shared", { create });
+  const stores = await gameDir.getDirectoryHandle("stores", { create });
+  return stores.getDirectoryHandle(group, { create });
+}
+async function saveDirect(group, name, blob) {
+  const dir = await groupDir(group, true);
+  const fh = await dir.getFileHandle(name + ".png", { create: true });
+  const w = await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+async function scanFolder() {
+  if (!gameDir) return;
+  say("scanning folder...");
+  let n = 0;
+  const groups = ["shared", ...Array.from({ length: 8 }, (_, i) => "s" + i)];
+  /* also pick up any store folder that is not s0..s7 */
+  try {
+    const stores = await gameDir.getDirectoryHandle("stores");
+    for await (const [nm, h] of stores.entries())
+      if (h.kind === "directory" && !groups.includes(nm)) groups.push(nm);
+  } catch (e) { /* no stores folder */ }
+  for (const g of groups) {
+    let dir;
+    try { dir = await groupDir(g, false); } catch (e) { continue; }
+    try {
+      for await (const [nm, h] of dir.entries()) {
+        if (h.kind !== "file" || !/\.png$/i.test(nm)) continue;
+        const file = await h.getFile();
+        const key = g + "/" + nm.replace(/\.png$/i, "");
+        const old = DISK[key];
+        DISK[key] = URL.createObjectURL(file);
+        if (old) URL.revokeObjectURL(old);
+        n++;
+      }
+    } catch (e) { say("could not read " + g + ": " + e.message, "warn"); }
+  }
+  buildGroups();
+  paintGallery();
+  refreshAnim();
+  say("read " + n + " PNGs from the folder - the browser now shows what is on disk", "ok");
+}
+
+/* ============================ gallery ============================ */
+/* Thumbnails start without a src and get one when they scroll near the visible
+   part of the gallery - 1200+ data URIs decoded at once would stall the page.
+   This is a plain geometry check rather than an IntersectionObserver: an
+   observer on a scrollable root did not reliably fire for rebuilt thumbnails. */
+let thumbTick = 0;
+function loadVisibleThumbs() {
+  thumbTick = 0;
+  const gal = $("gallery");
+  const gr = gal.getBoundingClientRect();
+  const top = gr.top - 250, bot = gr.bottom + 250;
+  for (const im of gal.querySelectorAll("img:not([data-loaded])")) {
+    const r = im.getBoundingClientRect();
+    if (r.bottom < top || r.top > bot) continue;
+    im.dataset.loaded = "1";
+    const u = assetURL(im.dataset.key);
+    if (u) im.src = u;
+  }
+}
+function scheduleThumbs() {
+  if (!thumbTick) thumbTick = requestAnimationFrame(loadVisibleThumbs);
+}
+function buildGroups() {
+  const keys = assetKeys();
+  const groups = [...new Set(keys.map(k => k.slice(0, k.indexOf("/"))))].sort((a, b) =>
+    a === "shared" ? -1 : b === "shared" ? 1 : a.localeCompare(b));
+  const known = ["shared", ...Array.from({ length: 8 }, (_, i) => "s" + i)];
+  for (const g of known) if (!groups.includes(g)) groups.push(g);
+
+  const tgt = $("saveTarget"), prevT = tgt.value;
+  tgt.innerHTML = "";
   groups.forEach(g => {
     const o = document.createElement("option");
     o.value = g; o.textContent = GROUP_LABELS[g] || g;
-    groupSel.appendChild(o);
+    tgt.appendChild(o);
   });
-  function showGroup(g) {
-    gallery.innerHTML = "";
-    Object.keys(ASSETS).filter(k => k.startsWith(g + "/")).sort().forEach(k => {
-      const name = k.split("/")[1];
-      const d = document.createElement("div");
-      d.style.cssText = "text-align:center;font-size:9px;color:#8a939d;cursor:pointer;width:70px";
-      const im = document.createElement("img");
-      im.src = ASSETS[k];
-      im.style.cssText = "image-rendering:pixelated;max-width:64px;max-height:52px;" +
-        "background:#000;border:1px solid #242a33;display:block;margin:0 auto";
-      d.appendChild(im);
-      d.appendChild(document.createTextNode(name));
-      d.onclick = () => loadDataURI(ASSETS[k], name);
-      gallery.appendChild(d);
-    });
-  }
-  groupSel.onchange = () => showGroup(groupSel.value);
-  if (groups.length) { groupSel.value = groups[0]; showGroup(groups[0]); }
+  if (prevT && groups.includes(prevT)) tgt.value = prevT;
 
-  alloc(); zoomFit(); repaint();
+  const gs = $("group"), prevG = gs.value;
+  gs.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "*"; all.textContent = "all groups";
+  gs.appendChild(all);
+  groups.forEach(g => {
+    if (!keys.some(k => k.startsWith(g + "/"))) return;
+    const o = document.createElement("option");
+    o.value = g; o.textContent = GROUP_LABELS[g] || g;
+    gs.appendChild(o);
+  });
+  gs.value = prevG && [...gs.options].some(o => o.value === prevG) ? prevG : (gs.options[1] ? gs.options[1].value : "*");
+}
+function paintGallery() {
+  const g = $("group").value || "*";
+  const q = $("search").value.trim().toLowerCase();
+  const gal = $("gallery");
+  gal.innerHTML = "";
+  const keys = assetKeys()
+    .filter(k => g === "*" || k.startsWith(g + "/"))
+    .filter(k => !q || k.toLowerCase().includes(q))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  $("galCount").textContent = keys.length + (keys.length === 1 ? " asset" : " assets");
+  if (!keys.length) {
+    const d = document.createElement("div");
+    d.style.cssText = "font-size:11px;color:var(--dim)";
+    d.textContent = assetKeys().length
+      ? "nothing matches that filter"
+      : "no assets embedded - run build-editor.ps1 with -GameRoot, or connect the game folder and hit rescan";
+    gal.appendChild(d);
+    return;
+  }
+  const curKey = refMeta && refMeta.key;
+  const frag = document.createDocumentFragment();
+  for (const k of keys) {
+    const name = k.slice(k.indexOf("/") + 1);
+    const d = document.createElement("div");
+    d.className = "thumb" + (k === curKey ? " cur" : "") + (EDITS[k] ? " edited" : "");
+    d.title = k + (EDITS[k] ? " (edited this session)" : "");
+    const im = document.createElement("img");
+    im.dataset.key = k;
+    im.alt = name;
+    im.loading = "lazy";
+    d.appendChild(im);
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = g === "*" ? k : name;
+    d.appendChild(nm);
+    d.onclick = () => openAsset(k);
+    frag.appendChild(d);
+  }
+  gal.appendChild(frag);
+  loadVisibleThumbs();
+}
+
+/* ============================ persistence ============================ */
+const LS = { session: "n64ae.session", prefs: "n64ae.prefs" };
+function savePrefs() {
+  try {
+    localStorage.setItem(LS.prefs, JSON.stringify({
+      palette: PALETTE, gameRoot: $("gameRoot").value, fmt: $("fmtSel").value,
+      dither: $("dither").checked, lock: $("lockPal").checked, grid: $("showGrid").checked,
+      fps: $("fps").value
+    }));
+  } catch (e) { /* quota or private mode - not worth bothering the user */ }
+}
+function loadPrefs() {
+  let p;
+  try { p = JSON.parse(localStorage.getItem(LS.prefs) || "null"); } catch (e) { return; }
+  if (!p) return;
+  if (Array.isArray(p.palette) && p.palette.length) PALETTE = p.palette.filter(isValidHex);
+  if (p.gameRoot) $("gameRoot").value = p.gameRoot;
+  if (p.fmt) $("fmtSel").value = p.fmt;
+  if (typeof p.dither === "boolean") $("dither").checked = p.dither;
+  if (typeof p.lock === "boolean") $("lockPal").checked = p.lock;
+  if (typeof p.grid === "boolean") $("showGrid").checked = p.grid;
+  if (p.fps) { $("fps").value = p.fps; $("fpsLab").textContent = p.fps + " fps"; }
+}
+function autosave() {
+  try {
+    localStorage.setItem(LS.session, JSON.stringify({
+      name: $("fname").value, group: $("saveTarget").value, w: W, h: H,
+      png: toDataURL(), at: Date.now()
+    }));
+  } catch (e) { /* image too big for localStorage; the editor still works */ }
+}
+function restoreSession() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(LS.session) || "null"); } catch (e) { return false; }
+  if (!s || !s.png) return false;
+  const img = new Image();
+  img.onload = () => {
+    adoptImage(img, s.name, s.group, null);
+    refMeta = null; refPix = null;
+    const mins = Math.round((Date.now() - (s.at || 0)) / 60000);
+    say("restored your last canvas (" + s.name + ", " + (mins < 1 ? "just now" : mins + " min ago") +
+        ") - press new for a blank one", "warn");
+  };
+  img.onerror = () => {};
+  img.src = s.png;
+  return true;
+}
+
+/* ============================ wiring ============================ */
+function setTool(t) {
+  tool = t;
+  [...$("tools").children].forEach(b => b.classList.toggle("on", b.dataset.tool === t));
+  /* the selection survives a tool change - it still bounds clear/copy/transform */
+}
+$("tools").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tool]");
+  if (b) setTool(b.dataset.tool);
+});
+$("brush").oninput = e => { brush = +e.target.value; $("brushLab").textContent = brush + " px"; };
+$("color").oninput = e => setColor(e.target.value);
+$("colorHex").onchange = e => {
+  if (isValidHex(e.target.value)) setColor(e.target.value);
+  else { say("not a hex color like #ff8800", "bad"); e.target.value = $("color").value; }
+};
+$("lockPal").onchange = savePrefs;
+$("bAddSw").onclick = () => {
+  const c = $("color").value.toLowerCase();
+  if (PALETTE.includes(c)) return say("already in the palette");
+  PALETTE.push(c); savePrefs(); renderPalette();
+};
+$("bPalReset").onclick = () => { PALETTE = DEFAULT_PALETTE.slice(); savePrefs(); renderPalette(); };
+$("bExtract").onclick = () => {
+  const { colors, transparent } = analyze();
+  if (!colors.length) return say("the canvas is empty", "bad");
+  PALETTE = medianCut(colors, transparent ? 15 : 16).map(c => rgb2hex([q5(c[0]), q5(c[1]), q5(c[2])]));
+  savePrefs(); renderPalette();
+  say("palette set to this image's " + PALETTE.length + " baked colors", "ok");
+};
+$("bPalSave").onclick = () => {
+  const a = document.createElement("a");
+  a.download = ($("fname").value.trim() || "palette") + ".palette.json";
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(PALETTE, null, 1)], { type: "application/json" }));
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
+$("bPalLoad").onclick = () => $("palFile").click();
+$("palFile").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  f.text().then(txt => {
+    let cols = [];
+    try {
+      const j = JSON.parse(txt);
+      cols = Array.isArray(j) ? j : (Array.isArray(j.colors) ? j.colors : []);
+    } catch (err) {
+      cols = txt.split(/\r?\n/).map(l => {
+        l = l.trim();
+        if (!l || l[0] === "#" && !HEXRE.test(l) || /^(GIMP|Name:|Columns:)/i.test(l)) {
+          const m = /^(\d+)\s+(\d+)\s+(\d+)/.exec(l);      /* .gpl rows */
+          return m ? rgb2hex([+m[1], +m[2], +m[3]]) : "";
+        }
+        const m = /^(\d+)\s+(\d+)\s+(\d+)/.exec(l);
+        if (m) return rgb2hex([+m[1], +m[2], +m[3]]);
+        return l;
+      });
+    }
+    cols = cols.map(c => String(c).trim()).filter(isValidHex).map(c => (c[0] === "#" ? c : "#" + c).toLowerCase());
+    if (!cols.length) return say("no colors found in that file", "bad");
+    PALETTE = cols; savePrefs(); renderPalette();
+    say("loaded " + cols.length + " colors", "ok");
+  });
+  e.target.value = "";
+};
+
+$("bUndo").onclick = undo;
+$("bRedo").onclick = redo;
+$("bClear").onclick = () => {
+  snapshot();
+  if (sel) clearRegion(sel); else pix.fill(0);
+  repaint();
+};
+$("bAll").onclick = () => { sel = { x: 0, y: 0, w: W, h: H }; setTool("select"); repaint(); };
+$("bNone").onclick = () => { sel = null; repaint(); };
+$("bFlipH").onclick = () => transformRegion("flipH");
+$("bFlipV").onclick = () => transformRegion("flipV");
+$("bRot180").onclick = () => transformRegion("rot180");
+$("bRot90").onclick = rot90;
+$("bCrop").onclick = () => { if (!sel) return say("select an area first", "bad"); cropTo(sel); };
+$("bTrim").onclick = () => {
+  const b = opaqueBounds();
+  if (!b) return say("nothing to trim - the canvas is empty", "bad");
+  if (b.w === W && b.h === H) return say("no transparent border to trim");
+  cropTo(b);
+};
+$("bResize").onclick = () => resizeTo(+$("inW").value, +$("inH").value, $("anchor").value);
+$("preset").onchange = e => {
+  if (!e.target.value) return;
+  const [w, h] = e.target.value.split("x").map(Number);
+  $("inW").value = w; $("inH").value = h;
+  resizeTo(w, h, $("anchor").value);
+};
+
+$("bNew").onclick = () => {
+  if (!confirmDiscard()) return;
+  snapshot();
+  pix = new Uint8ClampedArray(W * H * 4);
+  sel = null; refPix = null; refMeta = null; dirty = false;
+  try { localStorage.removeItem(LS.session); } catch (e) {}
+  repaint(); paintGallery();
+  say("blank " + W + "x" + H + " canvas", "ok");
+};
+$("bLoad").onclick = () => $("fileIn").click();
+$("fileIn").onchange = e => { loadFile(e.target.files[0]); e.target.value = ""; };
+$("bSave").onclick = doSave;
+$("bCopyImg").onclick = async () => {
+  try {
+    const blob = await toBlob();
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    say("image copied to the clipboard", "ok");
+  } catch (e) { say("clipboard blocked by the browser", "bad"); }
+};
+$("bRevert").onclick = () => {
+  if (!refPix || !refMeta) return say("nothing to revert to - this canvas was never opened from an asset", "bad");
+  if (!confirmDiscard()) return;
+  snapshot();
+  W = refMeta.w; H = refMeta.h; pix = refPix.slice(); sel = null;
+  dirty = false;
+  syncSizeInputs(); zoomFit(); repaint();
+  say("reverted " + refMeta.name, "ok");
+};
+$("bConnect").onclick = connectFolder;
+$("bScan").onclick = () => scanFolder().catch(e => say("scan failed: " + e.message, "bad"));
+$("bForget").onclick = async () => {
+  setConnected(null);
+  try { await idbDel("gameDir"); } catch (e) {}
+  say("forgot the game folder - saves will download again");
+};
+
+function bakeCmd() {
+  const root = $("gameRoot").value.trim() || "C:\\path\\to\\game";
+  return "docker run --rm -v " + root + ":/app -w /app libdragon:preview bash tools/bake/convert.sh";
+}
+$("gameRoot").oninput = () => { $("bakeCmd").textContent = bakeCmd(); savePrefs(); };
+$("bCopyCmd").onclick = () => navigator.clipboard.writeText(bakeCmd())
+  .then(() => say("bake command copied", "ok"), () => say("clipboard blocked", "bad"));
+
+$("fmtSel").onchange = () => { savePrefs(); bakedRender(); };
+$("dither").onchange = () => { savePrefs(); bakedRender(); };
+$("bApplyBake").onclick = () => {
+  snapshot();
+  pix = bakeCompute($("fmtSel").value, $("dither").checked);
+  repaint();
+  say("canvas replaced with the " + $("fmtSel").value.toUpperCase() + " result", "ok");
+};
+
+$("zIn").onclick = () => { ZOOM = clamp(ZOOM + 1, 1, 48); syncZoomLabel(); repaint(); };
+$("zOut").onclick = () => { ZOOM = clamp(ZOOM - 1, 1, 48); syncZoomLabel(); repaint(); };
+$("zFit").onclick = () => { zoomFit(); repaint(); };
+["showGrid", "showRef", "showOnion"].forEach(id => $(id).onchange = () => { savePrefs(); repaint(); });
+
+$("fname").oninput = refreshAnim;
+$("saveTarget").onchange = () => { refreshAnim(); };
+$("bPlay").onclick = () => animTimer ? stopAnim() : playAnim();
+$("bPrevF").onclick = () => stepFrame(-1);
+$("bNextF").onclick = () => stepFrame(1);
+$("fps").oninput = e => {
+  $("fpsLab").textContent = e.target.value + " fps";
+  savePrefs();
+  if (animTimer) playAnim();
+};
+$("group").onchange = paintGallery;
+$("search").oninput = paintGallery;
+$("gallery").addEventListener("scroll", scheduleThumbs, { passive: true });
+window.addEventListener("scroll", scheduleThumbs, { passive: true });
+
+/* ctrl+wheel zooms, like every other pixel editor */
+$("cwrap").addEventListener("wheel", e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  ZOOM = clamp(ZOOM + (e.deltaY < 0 ? 1 : -1), 1, 48);
+  syncZoomLabel(); repaint();
+}, { passive: false });
+
+document.addEventListener("keydown", e => {
+  const t = e.target;
+  if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (e.ctrlKey || e.metaKey) {
+    if (k === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if (k === "y") { e.preventDefault(); redo(); return; }
+    if (k === "s") { e.preventDefault(); doSave(); return; }
+    if (k === "a") { e.preventDefault(); $("bAll").onclick(); return; }
+    if (k === "c" || k === "x") {
+      e.preventDefault();
+      clip = extract(region());
+      if (k === "x") { snapshot(); clearRegion(region()); repaint(); }
+      say((k === "x" ? "cut " : "copied ") + clip.w + "x" + clip.h);
+      return;
+    }
+    if (k === "v") {
+      e.preventDefault();
+      if (!clip) return say("nothing copied yet", "bad");
+      snapshot();
+      const ox = sel ? sel.x : 0, oy = sel ? sel.y : 0;
+      blit(clip, ox, oy, true);
+      sel = { x: ox, y: oy, w: Math.min(clip.w, W - ox), h: Math.min(clip.h, H - oy) };
+      setTool("select"); repaint();
+      return;
+    }
+    return;
+  }
+  const tools = { b: "pen", e: "eraser", l: "line", r: "rect", o: "ellipse", g: "fill", i: "pick", m: "select" };
+  if (tools[k]) { setTool(tools[k]); return; }
+  if (k === "delete" || k === "backspace") { e.preventDefault(); $("bClear").onclick(); return; }
+  if (k === "escape") { sel = null; repaint(); return; }
+  if (k === "[") { $("brush").value = brush = clamp(brush - 1, 1, 8); $("brushLab").textContent = brush + " px"; return; }
+  if (k === "]") { $("brush").value = brush = clamp(brush + 1, 1, 8); $("brushLab").textContent = brush + " px"; return; }
+  if (k === "+" || k === "=") { $("zIn").onclick(); return; }
+  if (k === "-") { $("zOut").onclick(); return; }
+  if (k === "0") { $("zFit").onclick(); return; }
+  if (k === ",") { stepFrame(-1); return; }
+  if (k === ".") { stepFrame(1); return; }
+  const step = e.shiftKey ? 8 : 1;
+  if (k === "arrowleft") { e.preventDefault(); nudge(-step, 0); }
+  else if (k === "arrowright") { e.preventDefault(); nudge(step, 0); }
+  else if (k === "arrowup") { e.preventDefault(); nudge(0, -step); }
+  else if (k === "arrowdown") { e.preventDefault(); nudge(0, step); }
+});
+
+window.addEventListener("beforeunload", e => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
+let resizeTimer = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    scheduleThumbs();
+    if (ZOOM * W > $("cwrap").clientWidth) { zoomFit(); repaint(); }
+  }, 200);
+});
+
+/* ============================ boot ============================ */
+loadPrefs();
+renderPalette();
+brush = +$("brush").value;
+buildGroups();
+paintGallery();
+$("bakeCmd").textContent = bakeCmd();
+syncHistoryButtons();
+$("bUndo").disabled = true; $("bRedo").disabled = true;
+zoomFit();
+repaint();
+refreshAnim();
+restoreFolder();
+
+if (!restoreSession()) {
+  const n = assetKeys().length;
+  say(n ? n + " assets loaded" + (BUILD_INFO && BUILD_INFO[0] !== "/" ? " - " + BUILD_INFO : "") +
+         " - pick one from the browser, or start drawing"
+        : "no assets embedded - open a PNG, or connect the game folder and hit rescan", n ? "ok" : "warn");
+}
 })();
 </script>
 </body>
