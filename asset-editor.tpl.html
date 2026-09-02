@@ -38,7 +38,20 @@
     background-image:linear-gradient(45deg,#181818 25%,transparent 25%,transparent 75%,#181818 75%),
       linear-gradient(45deg,#181818 25%,transparent 25%,transparent 75%,#181818 75%);
     background-size:16px 16px; background-position:0 0,8px 8px; }
+  #cstack { position:relative; display:inline-block; line-height:0; }
   #cv { image-rendering:pixelated; cursor:crosshair; display:block; touch-action:none; }
+  /* the overlay carries the hover cursor, the marquee and the live drag readout,
+     so hovering never has to redraw (or re-quantize) the picture underneath */
+  #ov { position:absolute; left:0; top:0; pointer-events:none; }
+  .hintline { font-size:11px; color:var(--dim); line-height:1.4; margin-top:5px; }
+  .hintline b { color:var(--ink); font-weight:normal; }
+  .hintline .k { color:var(--acc); }
+  .chip { display:inline-block; width:11px; height:11px; border-radius:2px;
+    border:1px solid var(--line); vertical-align:-1px; margin:0 2px; }
+  #dirtyMark { color:var(--warn); text-transform:none; letter-spacing:0; }
+  #savePath { word-break:break-all; }
+  #savePath .path { color:var(--ink); }
+  #savePath .over { color:var(--warn); }
   .sw { display:inline-block; width:20px; height:20px; border:1px solid var(--line); border-radius:3px;
     cursor:pointer; vertical-align:middle; margin:1px; }
   .sw.sel { outline:2px solid var(--acc); outline-offset:1px; }
@@ -75,7 +88,7 @@
   <!-- ============ left column ============ -->
   <div class="panel col" style="width:272px">
     <div>
-      <label>filename (no extension)</label>
+      <label>filename (no extension) <span id="dirtyMark"></span></label>
       <input type="text" id="fname" value="untitled" style="width:100%">
       <label>asset group / save target</label>
       <select id="saveTarget" style="width:100%"></select>
@@ -119,6 +132,7 @@
         <button data-tool="pick" title="eyedropper (I) - or hold Alt with any tool">pick</button>
         <button data-tool="select" title="rectangular select (M) - drag inside the marquee to move it">sel</button>
       </div>
+      <div id="toolHint" class="hintline"></div>
       <label>brush <span id="brushLab" style="text-transform:none">1 px</span> &mdash; <kbd>[</kbd> <kbd>]</kbd></label>
       <input type="range" id="brush" min="1" max="8" value="1" style="width:100%">
     </div>
@@ -132,6 +146,7 @@
         <label class="chk" title="snap every drawn color to the nearest palette entry">
           <input type="checkbox" id="lockPal"> lock</label>
       </div>
+      <div id="drawsAs" class="hintline"></div>
       <label>palette <span id="palCount" style="text-transform:none"></span></label>
       <div id="pal"></div>
       <div class="btns" style="margin-top:5px">
@@ -179,6 +194,7 @@
         <button id="bCopyImg" title="copy the image to the clipboard">copy</button>
         <button id="bRevert" title="reload the asset as it was when opened">revert</button>
       </div>
+      <div id="savePath" class="hintline"></div>
       <label>game folder &mdash; direct save</label>
       <div class="btns">
         <button id="bConnect">connect</button>
@@ -231,7 +247,7 @@
         <input type="checkbox" id="showOnion"> onion</label>
       <span id="coords" style="font-size:11px;color:var(--dim);margin-left:auto;min-width:130px;text-align:right"></span>
     </div>
-    <div id="cwrap"><canvas id="cv"></canvas></div>
+    <div id="cwrap"><div id="cstack"><canvas id="cv"></canvas><canvas id="ov"></canvas></div></div>
   </div>
 
   <!-- ============ right column ============ -->
@@ -353,19 +369,21 @@ function assetKeys() {
 }
 
 const cv = $("cv"), ctx = cv.getContext("2d");
+const ov = $("ov"), octx = ov.getContext("2d");
 const pv = $("preview"), pctx = pv.getContext("2d");
 /* 1x scratch canvas: we render pixels into it, then blit scaled (much faster than
    one fillRect per pixel, and keeps transparency crisp). */
 const sc = document.createElement("canvas"), sctx = sc.getContext("2d");
 
 /* ============================ history ============================ */
-function stateOf() { return { W, H, data: pix.slice(), sel: sel && { ...sel } }; }
+function stateOf(label) { return { W, H, data: pix.slice(), sel: sel && { ...sel }, label }; }
 function applyState(s) {
   W = s.W; H = s.H; pix = s.data; sel = s.sel ? { ...s.sel } : null;
   syncSizeInputs();
 }
-function snapshot() {
-  undoStack.push(stateOf());
+/* `label` names the action about to happen, so undo can say what it reversed */
+function snapshot(label) {
+  undoStack.push(stateOf(label || "edit"));
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   redoStack.length = 0;
   markDirty();
@@ -376,21 +394,27 @@ function syncHistoryButtons() {
   $("bRedo").disabled = !redoStack.length;
 }
 function undo() {
-  if (!undoStack.length) return say("nothing to undo");
-  redoStack.push(stateOf());
-  applyState(undoStack.pop());
+  if (!undoStack.length) return say("nothing left to undo", "warn");
+  const s = undoStack.pop();
+  redoStack.push(stateOf(s.label));
+  applyState(s);
   syncHistoryButtons(); markDirty(); repaint();
+  say("undid " + s.label + (undoStack.length ? "  (" + undoStack.length + " more)" : "  (nothing left)"));
 }
 function redo() {
-  if (!redoStack.length) return say("nothing to redo");
-  undoStack.push(stateOf());
-  applyState(redoStack.pop());
+  if (!redoStack.length) return say("nothing left to redo", "warn");
+  const s = redoStack.pop();
+  undoStack.push(stateOf(s.label));
+  applyState(s);
   syncHistoryButtons(); markDirty(); repaint();
+  say("redid " + s.label);
 }
 
 let autosaveTimer = 0;
 function markDirty() {
+  const was = dirty;
   dirty = true;
+  if (!was) updateDirtyUI();
   clearTimeout(autosaveTimer);
   autosaveTimer = setTimeout(autosave, 1500);
 }
@@ -431,6 +455,7 @@ let onionImg = null;   // HTMLImageElement of the previous animation frame
 
 function repaint() {
   cv.width = W * ZOOM; cv.height = H * ZOOM;
+  ov.width = cv.width; ov.height = cv.height;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, cv.width, cv.height);
 
@@ -461,21 +486,93 @@ function repaint() {
       ctx.stroke();
     }
   }
-  if (sel) {
-    ctx.save();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "#000";
-    ctx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
-    ctx.strokeStyle = "#57c7a8";
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
-    ctx.restore();
-  }
+  drawOverlay();
 
   pv.width = W; pv.height = H;
   pctx.putImageData(new ImageData(pix.slice(), W, H), 0, 0);
   scheduleBake();
   drawAnimFrame();
+}
+
+/* ---- overlay: what you are about to do, and what you are doing right now ----
+   Drawn on its own layer so moving the mouse never redraws (or re-quantizes)
+   the picture. */
+function boxAround(x, y, w, h) {           /* two-tone outline, readable on any art */
+  octx.lineWidth = 1;
+  octx.strokeStyle = "rgba(0,0,0,0.85)";
+  octx.strokeRect(x * ZOOM - .5, y * ZOOM - .5, w * ZOOM + 1, h * ZOOM + 1);
+  octx.strokeStyle = "rgba(255,255,255,0.9)";
+  octx.strokeRect(x * ZOOM + .5, y * ZOOM + .5, w * ZOOM - 1, h * ZOOM - 1);
+}
+function overlayLabel(text) {
+  if (!text || !lastXY) return;
+  octx.font = "11px Consolas, monospace";
+  const w = octx.measureText(text).width + 10;
+  let x = lastXY[0] * ZOOM + ZOOM + 6, y = lastXY[1] * ZOOM - 20;
+  x = clamp(x, 0, Math.max(0, ov.width - w));
+  y = clamp(y, 0, Math.max(0, ov.height - 18));
+  octx.fillStyle = "rgba(11,13,16,0.92)";
+  octx.fillRect(x, y, w, 17);
+  octx.strokeStyle = "#57c7a8";
+  octx.lineWidth = 1;
+  octx.strokeRect(x + .5, y + .5, w - 1, 16);
+  octx.fillStyle = "#d6dbe0";
+  octx.fillText(text, x + 5, y + 12);
+}
+function drawOverlay() {
+  octx.clearRect(0, 0, ov.width, ov.height);
+
+  if (sel) {
+    octx.save();
+    octx.lineWidth = 1;
+    octx.strokeStyle = "#000";
+    octx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
+    octx.strokeStyle = "#57c7a8";
+    octx.setLineDash([4, 4]);
+    octx.strokeRect(sel.x * ZOOM + .5, sel.y * ZOOM + .5, sel.w * ZOOM - 1, sel.h * ZOOM - 1);
+    octx.restore();
+  }
+
+  if (!lastXY) return;
+  const [hx, hy] = lastXY;
+  const onCanvas = hx >= 0 && hy >= 0 && hx < W && hy < H;
+
+  /* footprint of the next stroke: the exact pixels the brush would touch */
+  if (onCanvas && !drag && (tool === "pen" || tool === "eraser")) {
+    const lo = -((brush - 1) >> 1), hi = brush >> 1;
+    boxAround(hx + lo, hy + lo, hi - lo + 1, hi - lo + 1);
+    if (tool !== "eraser") {
+      const c = currentRGB();
+      octx.fillStyle = "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0.55)";
+      octx.fillRect((hx + lo) * ZOOM + 1, (hy + lo) * ZOOM + 1,
+        (hi - lo + 1) * ZOOM - 2, (hi - lo + 1) * ZOOM - 2);
+    }
+  } else if (onCanvas && !drag) {
+    boxAround(hx, hy, 1, 1);
+  }
+
+  overlayLabel(dragLabel());
+}
+/* one sentence describing the gesture in progress, shown at the cursor */
+function dragLabel() {
+  if (!drag || !lastXY) return "";
+  const [x, y] = lastXY;
+  if (drag.tool === "line") {
+    const dx = Math.abs(x - drag.x0), dy = Math.abs(y - drag.y0);
+    return "line " + (Math.max(dx, dy) + 1) + " px";
+  }
+  if (drag.tool === "rect" || drag.tool === "ellipse") {
+    const w = Math.abs(x - drag.x0) + 1, h = Math.abs(y - drag.y0) + 1;
+    return (drag.tool === "rect" ? "rect " : "oval ") + w + "x" + h +
+      (drag.filled ? " filled" : " outline");
+  }
+  if (drag.tool === "marquee") return "select " + (sel ? sel.w + "x" + sel.h : "");
+  if (drag.tool === "move" && sel) {
+    const dx = sel.x - drag.sx, dy = sel.y - drag.sy;
+    return "move " + (dx >= 0 ? "+" : "") + dx + ", " + (dy >= 0 ? "+" : "") + dy;
+  }
+  if (drag.tool === "pen") return drag.erase ? "erasing" : "";
+  return "";
 }
 
 /* ============================ color / drawing ============================ */
@@ -613,12 +710,12 @@ function transformRegion(kind) {
     out[d] = src.data[s]; out[d + 1] = src.data[s + 1];
     out[d + 2] = src.data[s + 2]; out[d + 3] = src.data[s + 3];
   }
-  snapshot();
+  snapshot(kind === "flipH" ? "flip H" : kind === "flipV" ? "flip V" : "rotate 180");
   blit({ w: r.w, h: r.h, data: out }, r.x, r.y, false);
   repaint();
 }
 function rot90() {
-  snapshot();
+  snapshot("rotate 90");
   const src = pix, sw = W, sh = H;
   const out = new Uint8ClampedArray(src.length);
   for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
@@ -630,13 +727,14 @@ function rot90() {
   say("rotated to " + W + "x" + H, "ok");
 }
 function nudge(dx, dy) {
-  snapshot();
+  snapshot("nudge");
   if (sel) {
     const buf = extract(sel);
     clearRegion(sel);
     sel.x = clamp(sel.x + dx, -sel.w + 1, W - 1);
     sel.y = clamp(sel.y + dy, -sel.h + 1, H - 1);
     blit(buf, sel.x, sel.y, false);
+    say("moved the selection by " + dx + "," + dy);
   } else {                                   /* wrap-around: keeps tiles seamless */
     const out = new Uint8ClampedArray(pix.length);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -645,13 +743,14 @@ function nudge(dx, dy) {
       out[d] = pix[s]; out[d + 1] = pix[s + 1]; out[d + 2] = pix[s + 2]; out[d + 3] = pix[s + 3];
     }
     pix = out;
+    say("shifted the whole image by " + dx + "," + dy + " - edges wrapped around");
   }
   repaint();
 }
 function resizeTo(nw, nh, anchor) {
   nw = clamp(Math.round(nw) || 1, 1, 512); nh = clamp(Math.round(nh) || 1, 1, 512);
   if (nw === W && nh === H) return;
-  snapshot();
+  snapshot("resize");
   const out = new Uint8ClampedArray(nw * nh * 4);
   let ox = 0, oy = 0;
   if (anchor === "c") { ox = ((nw - W) / 2) | 0; oy = ((nh - H) / 2) | 0; }
@@ -681,7 +780,7 @@ function opaqueBounds() {
   return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 function cropTo(r) {
-  snapshot();
+  snapshot("crop");
   const buf = extract(r);
   W = r.w; H = r.h; pix = buf.data; sel = null;
   syncSizeInputs(); zoomFit(); repaint();
@@ -698,8 +797,10 @@ function evPixel(e) {
 function pickAt(x, y) {
   if (x < 0 || y < 0 || x >= W || y >= H) return;
   const i = (y * W + x) * 4;
-  if (!pix[i + 3]) return say("that pixel is transparent");
-  setColor(rgb2hex([pix[i], pix[i + 1], pix[i + 2]]));
+  if (!pix[i + 3]) return say("that pixel is transparent - nothing to pick", "warn");
+  const hex = rgb2hex([pix[i], pix[i + 1], pix[i + 2]]);
+  setColor(hex);
+  say("picked " + hex + " from " + x + "," + y, "ok");
 }
 const inSel = (x, y) => sel && x >= sel.x && y >= sel.y && x < sel.x + sel.w && y < sel.y + sel.h;
 
@@ -714,7 +815,7 @@ cv.addEventListener("pointerdown", e => {
 
   if (tool === "select") {
     if (inSel(x, y)) {
-      snapshot();
+      snapshot("move selection");
       const lifted = extract(sel);
       const hole = pix.slice();
       clearRegion(sel, hole);   /* the block leaves clean space behind it */
@@ -728,7 +829,7 @@ cv.addEventListener("pointerdown", e => {
   }
 
   const rgb = currentRGB();
-  snapshot();
+  snapshot(erase ? "erase" : tool === "fill" ? (e.shiftKey ? "replace color" : "fill") : tool + " stroke");
   if (tool === "fill") { floodFill(x, y, erase, rgb, e.shiftKey); repaint(); return; }
   if (tool === "line" || tool === "rect" || tool === "ellipse") {
     drag = { tool, x0: x, y0: y, erase, rgb, base: pix.slice() };
@@ -742,13 +843,21 @@ cv.addEventListener("pointerdown", e => {
 let lastXY = null;
 function showCoords() {
   const inside = lastXY && lastXY[0] >= 0 && lastXY[1] >= 0 && lastXY[0] < W && lastXY[1] < H;
+  const gesture = dragLabel();
   $("coords").textContent = (inside ? lastXY[0] + "," + lastXY[1] : "") +
-    (sel ? "  sel " + sel.w + "x" + sel.h : "");
+    (sel ? "  sel " + sel.w + "x" + sel.h : "") +
+    (gesture ? "  " + gesture : "");
 }
 cv.addEventListener("pointermove", e => {
   const [x, y] = evPixel(e);
   lastXY = [x, y];
-  if (!drag) { showCoords(); return; }
+  if (!drag) {
+    cv.style.cursor = tool === "pick" || e.altKey ? "copy"
+      : tool === "select" ? (inSel(x, y) ? "move" : "crosshair")
+      : "crosshair";
+    showCoords(); drawOverlay();
+    return;
+  }
   if (drag.tool === "pen") {
     lineTo(drag.x0, drag.y0, x, y, drag.erase, drag.rgb);
     drag.x0 = x; drag.y0 = y;
@@ -766,6 +875,7 @@ cv.addEventListener("pointermove", e => {
   } else {
     pix.set(drag.base);
     const filled = e.shiftKey;
+    drag.filled = filled;
     if (drag.tool === "line") lineTo(drag.x0, drag.y0, x, y, drag.erase, drag.rgb);
     if (drag.tool === "rect") drawRect(drag.x0, drag.y0, x, y, drag.erase, drag.rgb, filled);
     if (drag.tool === "ellipse") drawEllipse(drag.x0, drag.y0, x, y, drag.erase, drag.rgb, filled);
@@ -782,7 +892,9 @@ function endDrag() {
 }
 cv.addEventListener("pointerup", endDrag);
 cv.addEventListener("pointercancel", endDrag);
-cv.addEventListener("pointerleave", () => { if (!drag) { lastXY = null; showCoords(); } });
+cv.addEventListener("pointerleave", () => {
+  if (!drag) { lastXY = null; showCoords(); drawOverlay(); }
+});
 
 /* drop a PNG straight onto the canvas */
 ["dragover", "drop"].forEach(t => $("cwrap").addEventListener(t, e => {
@@ -799,6 +911,8 @@ function setColor(hex) {
   $("color").value = hex;
   $("colorHex").value = hex;
   [...$("pal").children].forEach(s => s.classList.toggle("sel", s.dataset.c === hex));
+  updateDrawsAs();
+  drawOverlay();
 }
 function renderPalette() {
   const pal = $("pal");
@@ -817,6 +931,7 @@ function renderPalette() {
     };
     pal.appendChild(s);
   });
+  updateDrawsAs();
   $("palCount").textContent = PALETTE.length + (PALETTE.length > 16 ? " (over 16!)" : "");
   $("palCount").style.color = PALETTE.length > 16 ? "var(--warn)" : "var(--dim)";
   setColor($("color").value);
@@ -1037,7 +1152,10 @@ function stepFrame(d) {
 
 /* ============================ open / save ============================ */
 function confirmDiscard() {
-  return !dirty || confirm("The current image has unsaved changes. Discard them?");
+  if (!dirty) return true;
+  const nm = $("fname").value.trim() || "this image";
+  return confirm(nm + " has unsaved changes. Discard them?" +
+    "  (Cancel, then use save png, to keep them.)");
 }
 function adoptImage(img, name, group, key) {
   W = img.naturalWidth || img.width; H = img.naturalHeight || img.height;
@@ -1051,7 +1169,8 @@ function adoptImage(img, name, group, key) {
   if (name) $("fname").value = name;
   if (group) $("saveTarget").value = group;
   undoStack.length = 0; redoStack.length = 0; sel = null; dirty = false;
-  syncHistoryButtons(); syncSizeInputs(); zoomFit(); refreshAnim(); repaint(); paintGallery();
+  syncHistoryButtons(); syncSizeInputs(); zoomFit(); refreshAnim(); repaint();
+  paintGallery(); updateStatusPanels();
 }
 function loadFile(file) {
   if (!file || !/image\//.test(file.type)) return say("that is not an image file", "bad");
@@ -1106,6 +1225,7 @@ async function doSave() {
       await saveDirect(group, name, blob);
       EDITS[key] = toDataURL();
       dirty = false;
+      updateStatusPanels();
       refPix = pix.slice(); refMeta = { key, name, group, w: W, h: H };
       savedList.add(key);
       $("changed").textContent = "saved this session: " + [...savedList].join(", ");
@@ -1123,6 +1243,7 @@ async function doSave() {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   EDITS[key] = toDataURL();
   dirty = false;
+  updateStatusPanels();
   say("downloaded " + name + ".png - move it into assets/" + (group === "shared" ? "shared" : "stores/" + group), "ok");
   paintGallery(); refreshAnim();
 }
@@ -1164,6 +1285,7 @@ function setConnected(dir) {
   $("bScan").disabled = !on;
   $("bForget").disabled = !on;
   $("bConnect").textContent = on ? "reconnect" : "connect";
+  updateSavePath();
 }
 async function connectFolder() {
   if (!window.showDirectoryPicker) {
@@ -1325,6 +1447,8 @@ function paintGallery() {
     const im = document.createElement("img");
     im.dataset.key = k;
     im.alt = name;
+    im.onload = () => { d.title = k + "  " + im.naturalWidth + "x" + im.naturalHeight +
+      (EDITS[k] ? "  (edited this session)" : ""); };
     im.loading = "lazy";
     d.appendChild(im);
     const nm = document.createElement("span");
@@ -1337,6 +1461,56 @@ function paintGallery() {
   gal.appendChild(frag);
   loadVisibleThumbs();
 }
+
+/* ==================== telling the user what is going on ==================== */
+const TOOL_HINTS = {
+  pen:     "drag to draw &middot; <span class='k'>right-click</span> erases &middot; <span class='k'>Alt</span> picks a color",
+  eraser:  "drag to rub pixels out &middot; <span class='k'>[</span> <span class='k'>]</span> resize the tip",
+  line:    "drag from one end to the other &middot; the length shows at the cursor",
+  rect:    "drag a box &middot; hold <span class='k'>Shift</span> to fill it instead of outlining",
+  ellipse: "drag a box &middot; hold <span class='k'>Shift</span> to fill it instead of outlining",
+  fill:    "click an enclosed area &middot; hold <span class='k'>Shift</span> to replace that color everywhere",
+  pick:    "click a pixel to make it the current color",
+  select:  "drag a box, then drag inside it to move those pixels &middot; " +
+           "<span class='k'>Ctrl+C/X/V</span>, arrows nudge, <span class='k'>Esc</span> deselects"
+};
+function updateToolHint() {
+  $("toolHint").innerHTML = "<b>" + tool + "</b> &mdash; " + (TOOL_HINTS[tool] || "");
+}
+/* "lock" silently redirects your color to the nearest palette entry - say so */
+function updateDrawsAs() {
+  const picked = $("color").value.toLowerCase();
+  const actual = rgb2hex(currentRGB());
+  const chip = c => "<span class='chip' style='background:" + c + "'></span>";
+  $("drawsAs").innerHTML = actual === picked
+    ? "draws " + chip(actual) + "<b>" + actual + "</b>"
+    : "lock is on &mdash; draws " + chip(actual) + "<b>" + actual + "</b>" +
+      " (nearest palette entry to " + picked + ")";
+}
+/* exactly which file the save button will write, and whether it replaces one */
+function updateSavePath() {
+  const name = $("fname").value.trim();
+  const group = $("saveTarget").value;
+  const el = $("savePath");
+  if (!name) { el.innerHTML = "name the file and it will show where it saves"; return; }
+  const dir = "assets\\" + (group === "shared" ? "shared" : "stores\\" + group) + "\\";
+  const exists = !!assetURL(group + "/" + name);
+  const label = gameDir ? "save to folder" : "download png";
+  $("bSave").textContent = label;
+  el.innerHTML = "<b>" + label + "</b> " +
+    (gameDir ? "writes <span class='path'>" + dir + name + ".png</span>"
+             : "gives you <span class='path'>" + name + ".png</span> to drop in " +
+               "<span class='path'>" + dir + "</span>") +
+    (exists ? " &mdash; <span class='over'>replaces the asset already there</span>"
+            : " &mdash; nothing by that name yet, so this makes a new asset");
+}
+/* an unsaved canvas should never be a surprise */
+function updateDirtyUI() {
+  $("dirtyMark").textContent = dirty ? "● unsaved" : "";
+  const nm = $("fname").value.trim();
+  document.title = (dirty ? "● " : "") + "N64 Asset Editor" + (nm ? " — " + nm : "");
+}
+function updateStatusPanels() { updateSavePath(); updateDirtyUI(); }
 
 /* ============================ persistence ============================ */
 const LS = { session: "n64ae.session", prefs: "n64ae.prefs" };
@@ -1390,6 +1564,8 @@ function restoreSession() {
 function setTool(t) {
   tool = t;
   [...$("tools").children].forEach(b => b.classList.toggle("on", b.dataset.tool === t));
+  updateToolHint();
+  drawOverlay();
   /* the selection survives a tool change - it still bounds clear/copy/transform */
 }
 $("tools").addEventListener("click", e => {
@@ -1402,7 +1578,7 @@ $("colorHex").onchange = e => {
   if (isValidHex(e.target.value)) setColor(e.target.value);
   else { say("not a hex color like #ff8800", "bad"); e.target.value = $("color").value; }
 };
-$("lockPal").onchange = savePrefs;
+$("lockPal").onchange = () => { savePrefs(); updateDrawsAs(); drawOverlay(); };
 $("bAddSw").onclick = () => {
   const c = $("color").value.toLowerCase();
   if (PALETTE.includes(c)) return say("already in the palette");
@@ -1455,7 +1631,7 @@ $("palFile").onchange = e => {
 $("bUndo").onclick = undo;
 $("bRedo").onclick = redo;
 $("bClear").onclick = () => {
-  snapshot();
+  snapshot(sel ? "clear selection" : "clear canvas");
   if (sel) clearRegion(sel); else pix.fill(0);
   repaint();
 };
@@ -1482,9 +1658,10 @@ $("preset").onchange = e => {
 
 $("bNew").onclick = () => {
   if (!confirmDiscard()) return;
-  snapshot();
+  snapshot("new canvas");
   pix = new Uint8ClampedArray(W * H * 4);
   sel = null; refPix = null; refMeta = null; dirty = false;
+  updateStatusPanels();
   try { localStorage.removeItem(LS.session); } catch (e) {}
   repaint(); paintGallery();
   say("blank " + W + "x" + H + " canvas", "ok");
@@ -1502,9 +1679,10 @@ $("bCopyImg").onclick = async () => {
 $("bRevert").onclick = () => {
   if (!refPix || !refMeta) return say("nothing to revert to - this canvas was never opened from an asset", "bad");
   if (!confirmDiscard()) return;
-  snapshot();
+  snapshot("revert");
   W = refMeta.w; H = refMeta.h; pix = refPix.slice(); sel = null;
   dirty = false;
+  updateStatusPanels();
   syncSizeInputs(); zoomFit(); repaint();
   say("reverted " + refMeta.name, "ok");
 };
@@ -1527,7 +1705,7 @@ $("bCopyCmd").onclick = () => navigator.clipboard.writeText(bakeCmd())
 $("fmtSel").onchange = () => { savePrefs(); bakedRender(); };
 $("dither").onchange = () => { savePrefs(); bakedRender(); };
 $("bApplyBake").onclick = () => {
-  snapshot();
+  snapshot("apply " + $("fmtSel").value.toUpperCase());
   pix = bakeCompute($("fmtSel").value, $("dither").checked);
   repaint();
   say("canvas replaced with the " + $("fmtSel").value.toUpperCase() + " result", "ok");
@@ -1538,8 +1716,8 @@ $("zOut").onclick = () => { ZOOM = clamp(ZOOM - 1, 1, 48); syncZoomLabel(); repa
 $("zFit").onclick = () => { zoomFit(); repaint(); };
 ["showGrid", "showRef", "showOnion"].forEach(id => $(id).onchange = () => { savePrefs(); repaint(); });
 
-$("fname").oninput = refreshAnim;
-$("saveTarget").onchange = () => { refreshAnim(); };
+$("fname").oninput = () => { refreshAnim(); updateStatusPanels(); };
+$("saveTarget").onchange = () => { refreshAnim(); updateSavePath(); };
 $("bPlay").onclick = () => animTimer ? stopAnim() : playAnim();
 $("bPrevF").onclick = () => stepFrame(-1);
 $("bNextF").onclick = () => stepFrame(1);
@@ -1573,14 +1751,14 @@ document.addEventListener("keydown", e => {
     if (k === "c" || k === "x") {
       e.preventDefault();
       clip = extract(region());
-      if (k === "x") { snapshot(); clearRegion(region()); repaint(); }
+      if (k === "x") { snapshot("cut"); clearRegion(region()); repaint(); }
       say((k === "x" ? "cut " : "copied ") + clip.w + "x" + clip.h);
       return;
     }
     if (k === "v") {
       e.preventDefault();
       if (!clip) return say("nothing copied yet", "bad");
-      snapshot();
+      snapshot("paste");
       const ox = sel ? sel.x : 0, oy = sel ? sel.y : 0;
       blit(clip, ox, oy, true);
       sel = { x: ox, y: oy, w: Math.min(clip.w, W - ox), h: Math.min(clip.h, H - oy) };
@@ -1624,10 +1802,12 @@ window.addEventListener("resize", () => {
 /* ============================ boot ============================ */
 loadPrefs();
 renderPalette();
+updateToolHint();
 brush = +$("brush").value;
 buildGroups();
 paintGallery();
 $("bakeCmd").textContent = bakeCmd();
+updateStatusPanels();
 syncHistoryButtons();
 $("bUndo").disabled = true; $("bRedo").disabled = true;
 zoomFit();

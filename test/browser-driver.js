@@ -78,6 +78,27 @@
     t("thumbnails still load after the gallery rebuilds", decoded === imgs.length,
       decoded + "/" + imgs.length);
 
+    S("feedback");
+    /* the panel that says exactly which file a save will write */
+    const sp = () => $("savePath").textContent;
+    t("save path names the file it will write", /arcadescr0_1\.png/.test(sp()), sp());
+    t("save path names the folder it belongs in", /assets.shared/.test(sp()), sp());
+    t("save path warns it replaces an existing asset", /replaces the asset already there/.test(sp()), sp());
+    t("save button says it downloads when no folder is connected",
+      $("bSave").textContent === "download png", $("bSave").textContent);
+    $("fname").value = "brandnewthing";
+    $("fname").dispatchEvent(new Event("input", { bubbles: true }));
+    t("save path flags a name that does not exist yet",
+      /makes a new asset/.test(sp()), sp());
+    $("fname").value = "arcadescr0_1";
+    $("fname").dispatchEvent(new Event("input", { bubbles: true }));
+    t("nothing is marked unsaved right after opening", $("dirtyMark").textContent === "",
+      $("dirtyMark").textContent);
+    t("the tool hint describes the active tool", /pen/.test($("toolHint").textContent),
+      $("toolHint").textContent);
+    t("the color readout says what will be drawn", /#57c7a8/.test($("drawsAs").textContent),
+      $("drawsAs").textContent);
+
     S("anim");
     t("frame sequence found", /4 frames/.test($("animInfo").textContent), $("animInfo").textContent);
     t("editing frame is named", /editing #1/.test($("animInfo").textContent), $("animInfo").textContent);
@@ -104,10 +125,38 @@
        endpoints would be red, so counting the run proves the stroke is filled in */
     t("the drag interpolated into a full stroke", redCount() >= 26, redCount());
     t("coords readout updated", /\d+,\d+/.test($("coords").textContent), $("coords").textContent);
+    t("drawing marks the file unsaved", /unsaved/.test($("dirtyMark").textContent),
+      $("dirtyMark").textContent);
+    t("the tab title flags unsaved work", document.title.indexOf("●") === 0, document.title);
+
+    /* lock-to-palette silently redirects the color, so it must be spelled out */
+    $("lockPal").checked = true;
+    $("lockPal").dispatchEvent(new Event("change", { bubbles: true }));
+    t("lock explains that it redirects the color", /lock is on/.test($("drawsAs").textContent),
+      $("drawsAs").textContent);
+    $("lockPal").checked = false;
+    $("lockPal").dispatchEvent(new Event("change", { bubbles: true }));
+    t("unlocking goes back to the plain color", /^draws/.test($("drawsAs").textContent.trim()),
+      $("drawsAs").textContent);
+
+    /* a shape drag reports its size at the cursor while you drag */
+    {
+      key("r");
+      pointer(cv, "pointerdown", c(4), c(4));
+      pointer(cv, "pointermove", c(15), c(11));
+      await sleep(30);
+      t("a rect drag reports its size live", /rect 12x8/.test($("coords").textContent),
+        $("coords").textContent);
+      pointer(cv, "pointerup", c(15), c(11), { buttons: 0 });
+      key("z", { ctrlKey: true });
+      key("b");
+    }
 
     S("undo");
     key("z", { ctrlKey: true });
     await sleep(40);
+    t("undo says what it reversed", /undid .*stroke/.test($("status").textContent),
+      $("status").textContent);
     const undone = px("preview", 5, 5);
     t("ctrl+z undid the stroke", !(undone[0] === 255 && !undone[1]), undone.join(","));
     key("y", { ctrlKey: true });

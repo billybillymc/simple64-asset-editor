@@ -45,6 +45,27 @@ Arrow keys nudge. With nothing selected the nudge **wraps**, which is how you
 line up a seamless floor/wall tile; with a selection it moves just that block.
 Shift+arrow moves 8 px. <kbd>Ctrl</kbd>+wheel zooms.
 
+## Knowing what you are about to do
+
+The editor tries to answer "what will this actually do?" before you commit to it:
+
+- The cursor draws the **exact pixels the brush would touch**, filled with the
+  colour that will really be used — so a 4 px brush looks like a 4 px brush.
+- **lock** quietly redirects your colour to the nearest palette entry, so the
+  panel spells it out: *lock is on — draws #e8262d (nearest palette entry to
+  #ff3388)*.
+- Dragging a shape reports itself at the cursor and in the corner:
+  *rect 23x17 outline*, *line 14 px*, *move +3, -2*, *select 8x8*.
+- Each tool prints its own modifiers underneath the tool buttons, so
+  right-click-erases and Shift-fills stop being folklore.
+- The save button says which thing it will do — **save to folder** or
+  **download png** — and under it, the exact path, plus whether that
+  **replaces an asset already there** or makes a new one.
+- Unsaved work is marked next to the filename and in the browser tab title,
+  and the discard prompt names the file it is about to throw away.
+- Undo says what it reversed (*undid fill (3 more)*), because every history
+  entry is labelled with the action that created it.
+
 ## Seeing the bake before you bake
 
 The *as baked* panel simulates what `mksprite` will do, so surprises show up
@@ -88,7 +109,7 @@ changes asks first, and **revert** restores the asset exactly as it was opened.
 
 ```
 node test/editor.test.js     # 79 assertions, no browser needed
-node test/browser.test.js    # 46 assertions, drives the real UI in headless Chrome
+node test/browser.test.js    # 60 assertions, drives the real UI in headless Chrome
 ```
 
 `editor.test.js` boots the editor's script against a small DOM stub — so a bad
@@ -98,7 +119,8 @@ drawing, selection, transform, resize, quantization and frame-detection logic.
 `browser.test.js` builds a small fixture page from the template and drives it in
 headless Chrome with real pointer and keyboard events: opening an asset from the
 gallery, lazy thumbnail loading, drawing a stroke, undo/redo, the marquee, the
-bake panel's warnings, transforms, revert, and filename validation. It skips itself (exit 0) when no
+bake panel's warnings, transforms, revert, filename validation, and every
+readout described under *Knowing what you are about to do*. It skips itself (exit 0) when no
 Chrome or Edge is installed; set `CHROME=<path>` to point it somewhere else.
 
 Run both after editing `asset-editor.tpl.html`.
