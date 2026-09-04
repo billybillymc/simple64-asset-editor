@@ -27,11 +27,27 @@ function findBrowser() {
   return candidates.find(p => { try { return fs.existsSync(p); } catch (e) { return false; } });
 }
 
-/* ---- a solid-color PNG, so the fixture needs no binary files on disk ---- */
+/* ---- PNGs built in-process, so the fixture needs no binary files on disk ---- */
 function solidPng(w, h, rgb) {
   const raw = Buffer.concat(Array.from({ length: h }, () =>
     Buffer.concat([Buffer.from([0]), Buffer.concat(Array.from({ length: w },
       () => Buffer.from([rgb[0], rgb[1], rgb[2], 255])))])));
+  return encodePng(w, h, raw);
+}
+/* an image with exactly `n` distinct colors, for exercising the CI4 budget */
+function noisyPng(w, h, n) {
+  const rows = [];
+  for (let y = 0; y < h; y++) {
+    const px = [Buffer.from([0])];
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) % n;
+      px.push(Buffer.from([(i * 7) & 255, (i * 29) & 255, (i * 53) & 255, 255]));
+    }
+    rows.push(Buffer.concat(px));
+  }
+  return encodePng(w, h, Buffer.concat(rows));
+}
+function encodePng(w, h, raw) {
   const chunk = (type, data) => {
     const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
     const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
@@ -62,13 +78,19 @@ function crc32(buf) {
   return (c ^ -1) >>> 0;
 }
 
-/* ---- fixture: 9 shared assets (one 4-frame anim, one 4-frame run, a title) ---- */
+/* ---- fixture: 9 shared assets (one 4-frame anim, one 4-frame run, a title),
+   plus one deliberate example in s0 of each problem the audit looks for ---- */
 function fixtureAssets() {
   const a = {};
   for (let f = 0; f < 4; f++) a["shared/arcadescr0_" + f] = solidPng(64, 48, [10, 200 - f * 40, 60]);
   for (let i = 1; i <= 4; i++) a["shared/tvstatic" + i] = solidPng(64, 48, [20 * i, 30, 40]);
   a["shared/title"] = solidPng(128, 24, [200, 30, 30]);
   a["s0/marker1"] = solidPng(64, 16, [0, 120, 200]);
+  a["s0/toomany"] = noisyPng(32, 32, 90);          /* 90 colors, far over budget */
+  a["s0/oddwide"] = solidPng(21, 16, [9, 9, 9]);   /* odd width, CI4 pads it */
+  a["s0/huge"] = solidPng(128, 128, [3, 3, 3]);    /* 8192 B, over one TMEM load */
+  a["s0/gappy1"] = solidPng(16, 16, [1, 2, 3]);    /* 1 and 3 exist, 2 is missing */
+  a["s0/gappy3"] = solidPng(16, 16, [4, 5, 6]);
   return Object.entries(a).map(([k, v]) => JSON.stringify(k) + ":" + JSON.stringify(v)).join(",\n");
 }
 

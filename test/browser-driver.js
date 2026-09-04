@@ -38,6 +38,10 @@
     return n;
   };
 
+  const setViewTo = m => {
+    $("viewMode").value = m;
+    $("viewMode").dispatchEvent(new Event("change", { bubbles: true }));
+  };
   window.addEventListener("error", e => R.push("FAIL uncaught [" + e.message + " @" + e.lineno + "]"));
   let step = "start";
   const S = n => { step = n; };
@@ -50,6 +54,9 @@
     const thumbs = [...document.querySelectorAll(".thumb")];
     t("gallery rendered thumbnails", thumbs.length === 9, thumbs.length);
     t("gallery count label", /assets?$/.test($("galCount").textContent), $("galCount").textContent);
+    t("the audit report stays hidden until asked for", $("auditWrap").hidden === true &&
+      getComputedStyle($("auditWrap")).display === "none",
+      getComputedStyle($("auditWrap")).display);
     t("no startup error in the status line", !/fail|error/i.test($("status").textContent), $("status").textContent);
     await sleep(200);
     const decodedAtBoot = thumbs.filter(d => {
@@ -249,6 +256,93 @@
     t("bake command follows the game root", $("bakeCmd").textContent.includes("D:\\proj\\mygame"),
       $("bakeCmd").textContent);
 
+    S("new features");
+    /* tiled preview: the seam check for floor/wall textures */
+    const pvW = $("preview").width;
+    $("tilePv").checked = true;
+    $("tilePv").dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(60);
+    t("tile 3x3 makes the preview nine copies", $("preview").width === pvW * 3,
+      pvW + " -> " + $("preview").width);
+    t("the preview label explains the tiled mode", /seams/.test($("pvLab").textContent),
+      $("pvLab").textContent);
+    $("tilePv").checked = false;
+    $("tilePv").dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(60);
+    t("untiling goes back to 1x", $("preview").width === pvW, $("preview").width);
+
+    /* stepping the animation and opening that frame to edit it */
+    $("fname").value = "arcadescr0_1";
+    $("fname").dispatchEvent(new Event("input", { bubbles: true }));
+    await sleep(60);
+    t("edit-it is disabled while previewing the open frame", $("bOpenFrame").disabled);
+    $("bNextF").click();
+    await sleep(60);
+    t("edit-it names the frame it would open", /arcadescr0_2/.test($("bOpenFrame").textContent),
+      $("bOpenFrame").textContent);
+    t("edit-it becomes available on another frame", !$("bOpenFrame").disabled);
+    $("bOpenFrame").click();
+    await sleep(300);
+    t("edit-it actually opens that frame", $("fname").value === "arcadescr0_2", $("fname").value);
+    t("opening a frame keeps the sequence", /4 frames/.test($("animInfo").textContent),
+      $("animInfo").textContent);
+
+    /* mapping existing pixels onto the palette */
+    $("bPalReset").click();
+    await sleep(30);
+    $("bMapPal").click();
+    await sleep(80);
+    t("map-image reports what it remapped", /remapped \d+ pixels|already on the palette/
+      .test($("status").textContent), $("status").textContent);
+    {
+      const d = previewData();
+      const pal = [...document.querySelectorAll("#pal .sw")].map(sw => sw.dataset.c);
+      const hex = v => v.toString(16).padStart(2, "0");
+      let offPalette = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (!d[i + 3]) continue;
+        if (!pal.includes("#" + hex(d[i]) + hex(d[i + 1]) + hex(d[i + 2]))) offPalette++;
+      }
+      t("every pixel now sits on the palette", offPalette === 0, offPalette + " strays");
+    }
+    key("z", { ctrlKey: true });
+    await sleep(60);
+    t("the remap is undoable", /undid map to palette/.test($("status").textContent),
+      $("status").textContent);
+
+    /* Ctrl+wheel must keep the pixel under the pointer put, or zooming in on a
+       detail throws it off screen */
+    const wrap = $("cwrap");
+    $("zFit").click(); await sleep(40);
+    for (let i = 0; i < 14; i++) $("zIn").click();   /* zoom past the view, so it can scroll */
+    await sleep(60);
+    t("the canvas can scroll once zoomed in", wrap.scrollWidth > wrap.clientWidth,
+      wrap.scrollWidth + " vs " + wrap.clientWidth);
+    const wr = wrap.getBoundingClientRect();
+    const anchorX = wr.left + wrap.clientWidth * 0.7, anchorY = wr.top + wrap.clientHeight * 0.6;
+    const pixelUnder = () => {
+      const r = cv.getBoundingClientRect(), z = parseInt($("zLab").textContent, 10);
+      return [Math.floor((anchorX - r.left) / z), Math.floor((anchorY - r.top) / z)];
+    };
+    const beforeZ = pixelUnder();
+    const zStart = parseInt($("zLab").textContent, 10);
+    /* eight steps at the same point: unanchored zoom drifts several pixels, so a
+       one-step tolerance would pass either way */
+    for (let i = 0; i < 8; i++) {
+      wrap.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true, cancelable: true, ctrlKey: true, deltaY: -1,
+        clientX: anchorX, clientY: anchorY
+      }));
+      await sleep(15);
+    }
+    const afterZ = pixelUnder();
+    t("Ctrl+wheel zoomed in", parseInt($("zLab").textContent, 10) === zStart + 8,
+      zStart + " -> " + $("zLab").textContent);
+    t("Ctrl+wheel keeps the pixel under the pointer through eight steps",
+      Math.abs(afterZ[0] - beforeZ[0]) <= 1 && Math.abs(afterZ[1] - beforeZ[1]) <= 1,
+      beforeZ + " -> " + afterZ);
+    $("zFit").click(); await sleep(40);
+
     S("search");
     $("search").value = "tvstatic";
     $("search").dispatchEvent(new Event("input", { bubbles: true }));
@@ -263,6 +357,230 @@
     await sleep(60);
     t("empty search result explains itself", /nothing matches/.test($("gallery").textContent),
       $("gallery").textContent.slice(0, 60));
+
+    S("audit");
+    /* The fixture carries one deliberate example of each problem:
+       s0/toomany 90 colors, s0/oddwide 21 px wide, s0/huge 128x128,
+       and s0/gappy1 + gappy3 with frame 2 missing between them. */
+    $("bAudit").click();
+    for (let i = 0; i < 60 && /scanning/.test($("auditSum").textContent); i++) await sleep(100);
+    t("the report opens", !$("auditWrap").hidden);
+    t("the scan covers every asset", /^15 scanned/.test($("auditSum").textContent),
+      $("auditSum").textContent);
+    const rowsFor = f => {
+      $("auditFilter").value = f;
+      $("auditFilter").dispatchEvent(new Event("change", { bubbles: true }));
+      return [...document.querySelectorAll("#auditList td.nm")].map(td => td.dataset.key);
+    };
+    const over = rowsFor("colors");
+    t("finds the asset that is over the CI4 palette",
+      over.length === 1 && over[0] === "s0/toomany", over.join(","));
+    t("says how many colors the bake will merge",
+      /merges 74 colors/.test($("auditList").textContent),
+      $("auditList").textContent.slice(0, 120));
+    const odd = rowsFor("odd");
+    t("finds the odd width", odd.length === 1 && odd[0] === "s0/oddwide", odd.join(","));
+    const tmem = rowsFor("tmem");
+    t("finds the asset too big for one TMEM load",
+      tmem.length === 1 && tmem[0] === "s0/huge", tmem.join(","));
+    const gaps = rowsFor("gap");
+    t("finds both frames either side of a missing one",
+      gaps.length === 2 && gaps.indexOf("s0/gappy1") >= 0 && gaps.indexOf("s0/gappy3") >= 0,
+      gaps.join(","));
+    t("names the frame that is missing", /frame 2 missing/.test($("auditList").textContent),
+      $("auditList").textContent.slice(0, 200));
+    t("no soft alpha in this fixture", rowsFor("alpha").length === 0);
+    t("problems-only lists exactly the five", rowsFor("problems").length === 5,
+      rowsFor("problems").join(","));
+    t("every-asset lists all fifteen", rowsFor("all").length === 15);
+    t("clean assets are called out as clean",
+      /bakes unchanged/.test($("auditList").textContent));
+    t("the headline breaks the flags down",
+      /over the CI4 palette/.test($("auditSum").textContent) &&
+      /odd width/.test($("auditSum").textContent), $("auditSum").textContent);
+
+    /* sorting by a column header */
+    rowsFor("all");
+    const th = [...document.querySelectorAll("#auditList th")].find(x => x.dataset.sort === "size");
+    th.click();
+    await sleep(30);
+    const bySize = [...document.querySelectorAll("#auditList td.nm")].map(x => x.dataset.key);
+    t("sorting by size puts the biggest first", bySize[0] === "s0/huge", bySize.slice(0, 3).join(","));
+
+    /* clicking a row opens that asset and closes the report */
+    rowsFor("colors");
+    document.querySelector("#auditList td.nm").click();
+    await sleep(300);
+    t("clicking a row closes the report", $("auditWrap").hidden);
+    t("clicking a row opens that asset", $("fname").value === "toomany", $("fname").value);
+    t("the opened asset really is over budget",
+      /\d+\/1[56] colors/.test($("warns").textContent) && /merge/.test($("warns").textContent),
+      $("warns").textContent.slice(0, 80));
+
+    /* one click should take an over-budget asset down to a palette that fits */
+    $("bAudit").click();
+    for (let i = 0; i < 60 && /scanning/.test($("auditSum").textContent); i++) await sleep(100);
+    rowsFor("colors");
+    document.querySelector("#auditList button[data-fix]").click();
+    await sleep(400);
+    t("fit-it opens the offending asset", $("fname").value === "toomany", $("fname").value);
+    t("fit-it leaves it inside the CI4 budget",
+      /^\d+\/1[56] colors/.test($("warns").textContent.trim()) &&
+      !/merge/.test($("warns").textContent), $("warns").textContent.slice(0, 70));
+    t("fit-it says what it cost", /cut .*from 90 colors/.test($("status").textContent),
+      $("status").textContent);
+    t("fit-it leaves the change unsaved for review", /unsaved/.test($("dirtyMark").textContent));
+    t("fit-it is undoable", !$("bUndo").disabled);
+    key("z", { ctrlKey: true });
+    await sleep(250);                      /* the bake panel is debounced by 90ms */
+    t("undoing fit-it restores the colors", /merge/.test($("warns").textContent),
+      $("warns").textContent.slice(0, 70));
+
+    /* colors you draw with should collect for reuse */
+    S("recent colors");
+    key("b");
+    $("color").value = "#123456";
+    $("color").dispatchEvent(new Event("input", { bubbles: true }));
+    pointer(cv, "pointerdown", c(3), c(3));
+    pointer(cv, "pointerup", c(3), c(3), { buttons: 0 });
+    await sleep(60);
+    const recentSw = [...document.querySelectorAll("#recent .sw")].map(x => x.dataset.c);
+    t("the color just used is remembered", recentSw[0] === "#123456", recentSw.join(","));
+    $("color").value = "#abcdef";
+    $("color").dispatchEvent(new Event("input", { bubbles: true }));
+    pointer(cv, "pointerdown", c(4), c(4));
+    pointer(cv, "pointerup", c(4), c(4), { buttons: 0 });
+    await sleep(60);
+    const recent2 = [...document.querySelectorAll("#recent .sw")].map(x => x.dataset.c);
+    t("the newest color comes first", recent2[0] === "#abcdef" && recent2[1] === "#123456",
+      recent2.join(","));
+    document.querySelectorAll("#recent .sw")[1].click();
+    t("clicking a recent color selects it", $("color").value === "#123456", $("color").value);
+
+    /* writing one drawing into several stores */
+    S("multi-store save");
+    $("fname").value = "marker1";
+    $("fname").dispatchEvent(new Event("input", { bubbles: true }));
+    $("saveTarget").value = "s0";
+    $("saveTarget").dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(60);
+    const boxes = [...document.querySelectorAll("#multiTargets input")];
+    t("other groups are offered as extra targets", boxes.length > 0, boxes.length);
+    t("the current target is not offered to itself",
+      boxes.every(b => b.value !== "s0"), boxes.map(b => b.value).join(","));
+    const sharedBox = boxes.find(b => b.value === "shared");
+    t("a store that already has the name is marked",
+      sharedBox && !sharedBox.parentElement.classList.contains("has"),
+      "shared has no marker1, so no dot");
+    sharedBox.checked = true;
+    sharedBox.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(60);
+    t("ticking a store shows up in the save line", /1 more store/.test($("savePath").textContent),
+      $("savePath").textContent);
+    t("and warns the folder is needed for it",
+      /needs the game folder connected/.test($("savePath").textContent),
+      $("savePath").textContent);
+    const many = [...document.querySelectorAll("#multiTargets input")].slice(0, 3);
+    many.forEach(b => { b.checked = true; b.dispatchEvent(new Event("change", { bubbles: true })); });
+    const stillChecked = [...document.querySelectorAll("#multiTargets input:checked")].length;
+    t("ticking several stores keeps them all ticked", stillChecked === 3, stillChecked);
+    t("the save line counts them all", /3 more stores/.test($("savePath").textContent),
+      $("savePath").textContent);
+    [...document.querySelectorAll("#multiTargets input:checked")]
+      .forEach(b => { b.checked = false; b.dispatchEvent(new Event("change", { bubbles: true })); });
+    t("unticking clears the extra stores",
+      !/more store/.test($("savePath").textContent), $("savePath").textContent);
+
+    S("view modes");
+    /* open a clean asset, change one pixel, and check the three views.
+       The search box still holds the filter from the gallery test - clear it. */
+    $("search").value = "";
+    $("search").dispatchEvent(new Event("input", { bubbles: true }));
+    $("group").value = "shared";
+    $("group").dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(150);
+    [...document.querySelectorAll(".thumb")]
+      .find(d => d.querySelector("img").alt === "tvstatic1").click();
+    await sleep(300);
+    t("opening an asset returns to the edit view", $("viewMode").value === "edit",
+      $("viewMode").value);
+
+    const zz = parseInt($("zLab").textContent, 10);
+    const cc = p => p * zz + Math.floor(zz / 2);
+    key("b");
+    $("color").value = "#ff00ff";
+    $("color").dispatchEvent(new Event("input", { bubbles: true }));
+    pointer(cv, "pointerdown", cc(10), cc(10));
+    pointer(cv, "pointerup", cc(10), cc(10), { buttons: 0 });
+    await sleep(80);
+
+    setViewTo("changes");
+    await sleep(80);
+    t("changes view counts what you touched", /^1 pixel changed/.test($("viewNote").textContent),
+      $("viewNote").textContent);
+    const cvPix = (x, y) => Array.from(cv.getContext("2d")
+      .getImageData(x * zz + 2, y * zz + 2, 1, 1).data);
+    const edited = cvPix(10, 10), untouched = cvPix(30, 30);
+    t("the edited pixel shows at full strength",
+      edited[0] === 255 && edited[1] === 0 && edited[2] === 255, edited.join(","));
+    t("untouched pixels are ghosted back",
+      untouched[3] < 200 && untouched[0] === untouched[1] && untouched[1] === untouched[2],
+      untouched.join(","));
+
+    /* Review views must not silently swallow strokes. Check the pixel itself:
+       tvstatic1 is fully opaque, so an opaque-pixel count cannot tell the
+       difference and would pass whether the guard worked or not. */
+    const isMagenta = () => {
+      const q = px("preview", 20, 20);
+      return q[0] === 255 && q[1] === 0 && q[2] === 255;
+    };
+    t("the test pixel starts out unpainted", !isMagenta(), px("preview", 20, 20).join(","));
+    pointer(cv, "pointerdown", cc(20), cc(20));
+    pointer(cv, "pointerup", cc(20), cc(20), { buttons: 0 });
+    await sleep(60);
+    t("drawing is refused in a review view", !isMagenta(), px("preview", 20, 20).join(","));
+    t("and it says why", /switch back to edit/.test($("status").textContent),
+      $("status").textContent);
+
+    setViewTo("baked");
+    await sleep(120);
+    t("baked view names the format", /IA8|CI4|RGBA/.test($("viewNote").textContent),
+      $("viewNote").textContent);
+
+    key("v");                                    /* V cycles back round to edit */
+    await sleep(60);
+    t("V cycles the view", $("viewMode").value === "changes", $("viewMode").value);
+    setViewTo("edit");
+    await sleep(60);
+    t("the edit view clears the note", $("viewNote").textContent === "", $("viewNote").textContent);
+    pointer(cv, "pointerdown", cc(20), cc(20));
+    pointer(cv, "pointerup", cc(20), cc(20), { buttons: 0 });
+    await sleep(60);
+    t("drawing works again once back in edit", isMagenta(), px("preview", 20, 20).join(","));
+
+    /* middle-drag pans instead of drawing */
+    S("pan");
+    const wrap2 = $("cwrap");
+    $("zFit").click(); await sleep(40);
+    for (let i = 0; i < 14; i++) $("zIn").click();
+    await sleep(60);
+    wrap2.scrollLeft = 40; wrap2.scrollTop = 40;
+    const opaqueBeforePan = opaqueInPreview();
+    pointer(cv, "pointerdown", 200, 200, { button: 1, buttons: 4 });
+    pointer(cv, "pointermove", 160, 170, { button: 1, buttons: 4 });
+    pointer(cv, "pointerup", 160, 170, { button: 1, buttons: 0 });
+    await sleep(60);
+    t("middle-drag scrolls the view", wrap2.scrollLeft === 80 && wrap2.scrollTop === 70,
+      wrap2.scrollLeft + "," + wrap2.scrollTop);
+    t("middle-drag draws nothing", opaqueInPreview() === opaqueBeforePan);
+    $("zFit").click();
+
+    /* Esc closes the report without deselecting behind it */
+    $("bAudit").click();
+    await sleep(60);
+    key("Escape");
+    await sleep(30);
+    t("Esc closes the report", $("auditWrap").hidden);
 
     report(R);
   })().catch(e => report(R.concat(["FAIL threw during " + step + " [" + e.message + "]"])));

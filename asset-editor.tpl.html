@@ -75,6 +75,37 @@
   kbd { font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:3px; padding:0 3px; }
   #keyhelp { font-size:11px; color:var(--dim); columns:2; column-gap:16px; margin-top:6px; }
   #keyhelp div { break-inside:avoid; }
+  #auditWrap { position:fixed; inset:0; background:rgba(6,8,10,.82); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:24px; }
+  #auditWrap[hidden] { display:none; }   /* the ID rule above outranks [hidden] */
+  #auditBox { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    width:min(980px,96vw); max-height:90vh; display:flex; flex-direction:column; padding:14px 16px; }
+  #auditHead { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  #auditHead h2 { font-size:15px; color:var(--acc); font-weight:normal; }
+  #auditSum { font-size:12px; color:var(--dim); flex:1; }
+  #auditList { overflow:auto; margin-top:10px; border-top:1px solid var(--line); }
+  table.audit { width:100%; border-collapse:collapse; font-size:12px; }
+  table.audit th { position:sticky; top:0; background:var(--panel); text-align:left;
+    font-weight:normal; color:var(--dim); font-size:10px; text-transform:uppercase;
+    letter-spacing:.06em; padding:6px 8px; border-bottom:1px solid var(--line); cursor:pointer;
+    white-space:nowrap; }
+  table.audit th.on { color:var(--acc); }
+  table.audit td { padding:4px 8px; border-bottom:1px solid #1c2027; white-space:nowrap; }
+  table.audit tr:hover td { background:#1b2129; }
+  table.audit td.nm { color:var(--ink); cursor:pointer; }
+  table.audit td.nm:hover { color:var(--acc); text-decoration:underline; }
+  .badge { display:inline-block; font-size:10px; border-radius:3px; padding:0 5px;
+    border:1px solid currentColor; margin-right:3px; }
+  .b-col { color:var(--bad); } .b-odd { color:var(--warn); }
+  .b-alpha { color:var(--warn); } .b-gap { color:var(--bad); } .b-ok { color:var(--acc); }
+  button.fix { font-size:10px; padding:1px 6px; }
+  .chk.has { color:var(--acc); }
+  .chk.has::after { content:"2"; margin-left:2px; }
+  #recent .sw { width:16px; height:16px; }
+  #recent:empty::after { content:"nothing yet - the colors you draw with collect here";
+    font-size:10px; color:var(--dim); }
+  .audit-thumb { width:32px; height:24px; object-fit:contain; image-rendering:pixelated;
+    background:#000; border:1px solid var(--line); vertical-align:middle; }
   details summary { cursor:pointer; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
 </style>
 </head>
@@ -147,10 +178,14 @@
           <input type="checkbox" id="lockPal"> lock</label>
       </div>
       <div id="drawsAs" class="hintline"></div>
+      <label>recently used</label>
+      <div id="recent"></div>
       <label>palette <span id="palCount" style="text-transform:none"></span></label>
       <div id="pal"></div>
       <div class="btns" style="margin-top:5px">
         <button id="bExtract" title="replace the palette with the image's own quantized colors">from image</button>
+        <button id="bMapPal" title="snap every pixel already on the canvas to the nearest palette entry">map image</button>
+        <button id="bPalRestore" hidden title="put back the palette you had before an asset borrowed it">restore mine</button>
         <button id="bPalReset" title="restore the default palette">reset</button>
         <button id="bPalSave" title="download the palette as .json">save</button>
         <button id="bPalLoad" title="load a .json / .hex / .gpl palette">load</button>
@@ -195,6 +230,8 @@
         <button id="bRevert" title="reload the asset as it was when opened">revert</button>
       </div>
       <div id="savePath" class="hintline"></div>
+      <label>also save into <span id="multiNote" style="text-transform:none"></span></label>
+      <div id="multiTargets" class="btns"></div>
       <label>game folder &mdash; direct save</label>
       <div class="btns">
         <button id="bConnect">connect</button>
@@ -228,7 +265,9 @@
         <div><kbd>Ctrl+C/X/V</kbd> clip</div><div><kbd>Ctrl+A</kbd> all</div>
         <div><kbd>Ctrl+S</kbd> save</div><div><kbd>Del</kbd> clear</div>
         <div><kbd>+</kbd><kbd>-</kbd> zoom</div><div><kbd>0</kbd> fit</div>
-        <div><kbd>,</kbd><kbd>.</kbd> prev/next frame</div><div><kbd>Esc</kbd> deselect</div>
+        <div><kbd>,</kbd><kbd>.</kbd> prev/next frame</div><div><kbd>Shift</kbd>+ open it</div>
+        <div><kbd>Ctrl</kbd>+wheel zoom</div><div><kbd>V</kbd> cycle view</div>
+        <div>middle-drag pans</div><div><kbd>Esc</kbd> deselect</div>
       </div>
     </details>
   </div>
@@ -240,11 +279,17 @@
       <span id="zLab" style="font-size:11px;color:var(--dim);min-width:56px;text-align:center">10x</span>
       <button id="zIn" title="zoom in (+)">+</button>
       <button id="zFit" title="fit to view (0)">fit</button>
+      <select id="viewMode" title="what the big canvas shows">
+        <option value="edit">edit</option>
+        <option value="baked">as baked</option>
+        <option value="changes">changes only</option>
+      </select>
       <label class="chk"><input type="checkbox" id="showGrid" checked> grid</label>
       <label class="chk" title="ghost the asset as it was when opened">
         <input type="checkbox" id="showRef"> ref</label>
       <label class="chk" title="ghost the previous animation frame underneath">
         <input type="checkbox" id="showOnion"> onion</label>
+      <span id="viewNote" style="font-size:11px;color:var(--dim)"></span>
       <span id="coords" style="font-size:11px;color:var(--dim);margin-left:auto;min-width:130px;text-align:right"></span>
     </div>
     <div id="cwrap"><div id="cstack"><canvas id="cv"></canvas><canvas id="ov"></canvas></div></div>
@@ -255,8 +300,11 @@
     <div>
       <div class="inline" style="align-items:flex-start">
         <div>
-          <label>preview 1x</label>
+          <label>preview <span id="pvLab" style="text-transform:none">1x</span></label>
           <canvas id="preview" class="pv"></canvas>
+          <label class="chk" style="margin-top:4px"
+                 title="repeat the image 3x3 so you can see whether the edges line up">
+            <input type="checkbox" id="tilePv"> tile 3x3</label>
         </div>
         <div>
           <label>as baked &mdash; <span id="fmtLabel">CI4</span></label>
@@ -274,6 +322,8 @@
         <button id="bApplyBake" title="write the baked result into the canvas">apply</button>
       </div>
       <div id="warns"></div>
+      <button id="bAudit" style="margin-top:8px"
+        title="check every asset for problems the bake will cause">scan every asset</button>
     </div>
 
     <div class="sep"></div>
@@ -284,6 +334,8 @@
         <button id="bPlay" disabled>play</button>
         <button id="bPrevF" title="previous frame (,)" disabled>&lt;</button>
         <button id="bNextF" title="next frame (.)" disabled>&gt;</button>
+        <button id="bOpenFrame" title="open the previewed frame for editing (Shift+, / Shift+.)"
+                disabled>edit it</button>
         <input type="range" id="fps" min="1" max="30" value="8" style="width:80px" title="frames per second">
         <span id="fpsLab" style="font-size:11px;color:var(--dim)">8 fps</span>
       </div>
@@ -301,6 +353,27 @@
       <input type="search" id="search" placeholder="filter by name..." style="width:100%;margin-top:6px">
       <div id="gallery"></div>
     </div>
+  </div>
+</div>
+<div id="auditWrap" hidden>
+  <div id="auditBox">
+    <div id="auditHead">
+      <h2>what the bake will do to your assets</h2>
+      <span id="auditSum"></span>
+      <select id="auditFilter">
+        <option value="problems">problems only</option>
+        <option value="all">every asset</option>
+        <option value="colors">over the CI4 palette</option>
+        <option value="odd">odd width</option>
+        <option value="alpha">partial alpha</option>
+        <option value="tmem">over one TMEM load</option>
+        <option value="gap">missing animation frames</option>
+      </select>
+      <button id="bAuditRescan" title="scan again, picking up anything you have saved">rescan</button>
+      <button id="bAuditCsv" title="download the whole table as CSV">export</button>
+      <button id="bAuditClose">close</button>
+    </div>
+    <div id="auditList"></div>
   </div>
 </div>
 <script>
@@ -469,7 +542,7 @@ function repaint() {
     ctx.drawImage(pixToCanvas(refPix, W, H), 0, 0, cv.width, cv.height);
     ctx.globalAlpha = 1;
   }
-  ctx.drawImage(pixToCanvas(pix, W, H), 0, 0, cv.width, cv.height);
+  ctx.drawImage(pixToCanvas(viewPixels(), W, H), 0, 0, cv.width, cv.height);
 
   if ($("showGrid").checked && ZOOM >= 5) {
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
@@ -487,11 +560,28 @@ function repaint() {
     }
   }
   drawOverlay();
+  if (viewMode() !== "edit") updateViewNote();
 
-  pv.width = W; pv.height = H;
-  pctx.putImageData(new ImageData(pix.slice(), W, H), 0, 0);
+  drawPreview();
   scheduleBake();
   drawAnimFrame();
+}
+
+/* The 1x preview doubles as a seam check: tiled 3x3, a floor or wall texture
+   shows immediately whether its edges meet. */
+function drawPreview() {
+  const tiled = $("tilePv").checked;
+  const src = pixToCanvas(pix, W, H);
+  const n = tiled ? 3 : 1;
+  pv.width = W * n; pv.height = H * n;
+  pctx.imageSmoothingEnabled = false;
+  pctx.clearRect(0, 0, pv.width, pv.height);
+  for (let ty = 0; ty < n; ty++) for (let tx = 0; tx < n; tx++)
+    pctx.drawImage(src, tx * W, ty * H);
+  const scale = tiled ? clamp(Math.floor(300 / (W * 3)), 1, 3) : 1;
+  pv.style.width = (pv.width * scale) + "px";
+  pv.style.height = (pv.height * scale) + "px";
+  $("pvLab").textContent = tiled ? "tiled 3x3 - check the seams" : "1x";
 }
 
 /* ---- overlay: what you are about to do, and what you are doing right now ----
@@ -808,7 +898,20 @@ cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", e => {
   const [x, y] = evPixel(e);
   const erase = e.button === 2 || tool === "eraser";
+  if (e.button === 1) {                       /* middle button pans the view */
+    e.preventDefault();
+    const wrap = $("cwrap");
+    drag = { tool: "pan", cx: e.clientX, cy: e.clientY,
+             sl: wrap.scrollLeft, st: wrap.scrollTop };
+    cv.setPointerCapture(e.pointerId);
+    cv.style.cursor = "grabbing";
+    return;
+  }
   if (e.button !== 0 && e.button !== 2) return;
+  if (viewMode() !== "edit" && !(e.altKey || tool === "pick")) {
+    say("this is the " + viewMode() + " view - switch back to edit to draw (V)", "warn");
+    return;
+  }
   cv.setPointerCapture(e.pointerId);
 
   if (e.altKey || tool === "pick") { pickAt(x, y); return; }
@@ -829,6 +932,7 @@ cv.addEventListener("pointerdown", e => {
   }
 
   const rgb = currentRGB();
+  if (!erase) noteRecent(rgb2hex(rgb));
   snapshot(erase ? "erase" : tool === "fill" ? (e.shiftKey ? "replace color" : "fill") : tool + " stroke");
   if (tool === "fill") { floodFill(x, y, erase, rgb, e.shiftKey); repaint(); return; }
   if (tool === "line" || tool === "rect" || tool === "ellipse") {
@@ -851,6 +955,12 @@ function showCoords() {
 cv.addEventListener("pointermove", e => {
   const [x, y] = evPixel(e);
   lastXY = [x, y];
+  if (drag && drag.tool === "pan") {
+    const wrap = $("cwrap");
+    wrap.scrollLeft = drag.sl - (e.clientX - drag.cx);
+    wrap.scrollTop = drag.st - (e.clientY - drag.cy);
+    return;
+  }
   if (!drag) {
     cv.style.cursor = tool === "pick" || e.altKey ? "copy"
       : tool === "select" ? (inSel(x, y) ? "move" : "crosshair")
@@ -886,6 +996,7 @@ cv.addEventListener("pointermove", e => {
 
 function endDrag() {
   if (drag && drag.tool === "marquee" && sel && sel.w * sel.h <= 1) sel = null;
+  if (drag && drag.tool === "pan") cv.style.cursor = "crosshair";
   drag = null;
   showCoords();
   repaint();
@@ -1107,6 +1218,7 @@ function refreshAnim() {
     (i < 0 ? "" : " (editing #" + animSeq.frames[i].n + ")");
   updateOnion();
   drawAnimFrame();
+  syncOpenFrame();
 }
 function updateOnion() {
   onionImg = null;
@@ -1148,6 +1260,22 @@ function stepFrame(d) {
   stopAnim();
   animIdx = (animIdx + d + animSeq.frames.length) % animSeq.frames.length;
   drawAnimFrame();
+  syncOpenFrame();
+  const f = animSeq.frames[animIdx];
+  if (f) say("previewing " + f.name + " - press edit it to open that frame");
+}
+/* the previewed frame is only useful if you can jump straight into editing it */
+function syncOpenFrame() {
+  const b = $("bOpenFrame");
+  const f = animSeq && animSeq.frames[animIdx];
+  b.disabled = !f || f.name === $("fname").value.trim();
+  b.textContent = f && f.name !== $("fname").value.trim() ? "edit " + f.name : "edit it";
+}
+function openPreviewedFrame() {
+  const f = animSeq && animSeq.frames[animIdx];
+  if (!f) return;
+  if (f.name === $("fname").value.trim()) return say("that is the frame you are editing");
+  openAsset(f.key);
 }
 
 /* ============================ open / save ============================ */
@@ -1169,6 +1297,7 @@ function adoptImage(img, name, group, key) {
   if (name) $("fname").value = name;
   if (group) $("saveTarget").value = group;
   undoStack.length = 0; redoStack.length = 0; sel = null; dirty = false;
+  $("viewMode").value = "edit"; updateViewNote();
   syncHistoryButtons(); syncSizeInputs(); zoomFit(); refreshAnim(); repaint();
   paintGallery(); updateStatusPanels();
 }
@@ -1185,14 +1314,18 @@ function loadFile(file) {
   img.onerror = () => { URL.revokeObjectURL(url); say("could not decode that image", "bad"); };
   img.src = url;
 }
-function openAsset(key) {
+function openAsset(key, then) {
   if (!confirmDiscard()) return;
   const url = assetURL(key);
   if (!url) return say("asset " + key + " is not loaded", "bad");
   const slash = key.indexOf("/");
   const group = key.slice(0, slash), name = key.slice(slash + 1);
   const img = new Image();
-  img.onload = () => { adoptImage(img, name, group, key); say("editing " + key + " (" + W + "x" + H + ")", "ok"); };
+  img.onload = () => {
+    adoptImage(img, name, group, key);
+    say("editing " + key + " (" + W + "x" + H + ")", "ok");
+    if (then) then();
+  };
   img.onerror = () => say("could not decode " + key, "bad");
   img.src = url;
 }
@@ -1220,6 +1353,8 @@ async function doSave() {
   const group = $("saveTarget").value;
   const blob = await toBlob();
   const key = group + "/" + name;
+  const extras = multiTargets();
+  invalidateAudit();
   if (gameDir) {
     try {
       await saveDirect(group, name, blob);
@@ -1228,8 +1363,14 @@ async function doSave() {
       updateStatusPanels();
       refPix = pix.slice(); refMeta = { key, name, group, w: W, h: H };
       savedList.add(key);
+      for (const g of extras) {                    /* the same art, other stores */
+        await saveDirect(g, name, blob);
+        EDITS[g + "/" + name] = EDITS[key];
+        savedList.add(g + "/" + name);
+      }
       $("changed").textContent = "saved this session: " + [...savedList].join(", ");
-      say("wrote " + key + ".png into the game folder", "ok");
+      say("wrote " + (1 + extras.length) + " file" + (extras.length ? "s" : "") +
+          " into the game folder: " + [key].concat(extras.map(g => g + "/" + name)).join(", "), "ok");
       paintGallery(); refreshAnim();
       return;
     } catch (err) {
@@ -1244,7 +1385,9 @@ async function doSave() {
   EDITS[key] = toDataURL();
   dirty = false;
   updateStatusPanels();
-  say("downloaded " + name + ".png - move it into assets/" + (group === "shared" ? "shared" : "stores/" + group), "ok");
+  if (extras.length) say("downloaded one file - connect the game folder to write " +
+    extras.length + " extra store" + (extras.length > 1 ? "s" : "") + " in one go", "warn");
+  else say("downloaded " + name + ".png - move it into assets/" + (group === "shared" ? "shared" : "stores/" + group), "ok");
   paintGallery(); refreshAnim();
 }
 
@@ -1364,6 +1507,8 @@ async function scanFolder() {
   buildGroups();
   paintGallery();
   refreshAnim();
+  updateStatusPanels();
+  invalidateAudit();
   say("read " + n + " PNGs from the folder - the browser now shows what is on disk", "ok");
 }
 
@@ -1462,6 +1607,387 @@ function paintGallery() {
   loadVisibleThumbs();
 }
 
+/* ======================= batch audit of every asset =======================
+   The bake panel only ever describes the file you have open, so a project-wide
+   problem (most of the art being over the CI4 palette, say) stays invisible.
+   This decodes every asset once and says which ones the bake will change. */
+function statsOf(data) {
+  const seen = new Set();
+  let transparent = 0, partial = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a === 0) { transparent++; continue; }
+    if (a < 255) partial++;
+    seen.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+  }
+  return { colors: seen.size, transparent, partial };
+}
+/* a name splits into a sequence prefix and a frame number, or it does not */
+function splitFrame(name) {
+  let m = /^(.*[^_])_(\d+)$/.exec(name);
+  if (m) return { prefix: m[1] + "_", n: parseInt(m[2], 10) };
+  m = /^(.*?)(\d+)$/.exec(name);
+  if (m && m[1]) return { prefix: m[1], n: parseInt(m[2], 10) };
+  return null;
+}
+/* animation runs should have no holes - a missing frame is a bug in the game */
+function sequenceGaps() {
+  const runs = new Map();
+  for (const k of assetKeys()) {
+    const slash = k.indexOf("/");
+    const f = splitFrame(k.slice(slash + 1));
+    if (!f) continue;
+    const id = k.slice(0, slash) + "/" + f.prefix;
+    if (!runs.has(id)) runs.set(id, []);
+    runs.get(id).push(f.n);
+  }
+  const out = new Map();
+  for (const [id, nums] of runs) {
+    if (nums.length < 2) continue;
+    const lo = Math.min.apply(null, nums), hi = Math.max.apply(null, nums);
+    const have = new Set(nums);
+    const missing = [];
+    for (let n = lo; n <= hi; n++) if (!have.has(n)) missing.push(n);
+    if (missing.length) out.set(id, missing);
+  }
+  return out;
+}
+
+let auditRows = null, auditBusy = false;
+let auditSort = "colors", auditDesc = true;
+
+async function runAudit() {
+  if (auditBusy) return;
+  auditBusy = true;
+  const keys = assetKeys().sort();
+  const scratch = document.createElement("canvas");
+  const sc2 = scratch.getContext("2d", { willReadFrequently: true });
+  const gaps = sequenceGaps();
+  const rows = [];
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (i % 20 === 0) {
+      $("auditSum").textContent = "scanning " + i + " of " + keys.length + "...";
+      await new Promise(r => setTimeout(r, 0));      /* keep the page responsive */
+    }
+    const url = assetURL(k);
+    if (!url) continue;
+    let st, w, h;
+    try {
+      const img = await new Promise((res, rej) => {
+        const im = new Image();
+        im.onload = () => res(im);
+        im.onerror = rej;
+        im.src = url;
+      });
+      w = img.naturalWidth; h = img.naturalHeight;
+      scratch.width = w; scratch.height = h;
+      sc2.clearRect(0, 0, w, h);
+      sc2.drawImage(img, 0, 0);
+      st = statsOf(sc2.getImageData(0, 0, w, h).data);
+    } catch (e) { continue; }
+    const slash = k.indexOf("/");
+    const f = splitFrame(k.slice(slash + 1));
+    const seqId = f ? k.slice(0, slash) + "/" + f.prefix : null;
+    const budget = st.transparent ? 15 : 16;
+    rows.push({
+      key: k, w: w, h: h, colors: st.colors, budget: budget,
+      partial: st.partial,
+      over: st.colors > budget,
+      odd: w % 2 === 1,
+      tmem: Math.ceil(w * h / 2) > 4096,
+      gap: seqId && gaps.has(seqId) ? gaps.get(seqId) : null
+    });
+  }
+  auditRows = rows;
+  auditBusy = false;
+  renderAudit();
+}
+const auditProblem = r => r.over || r.odd || r.partial > 0 || r.tmem || !!r.gap;
+function auditFiltered() {
+  const f = $("auditFilter").value;
+  const rows = (auditRows || []).filter(r =>
+    f === "all" ? true :
+    f === "problems" ? auditProblem(r) :
+    f === "colors" ? r.over :
+    f === "odd" ? r.odd :
+    f === "alpha" ? r.partial > 0 :
+    f === "tmem" ? r.tmem :
+    f === "gap" ? !!r.gap : true);
+  const dir = auditDesc ? -1 : 1;
+  return rows.slice().sort((a, b) => {
+    if (auditSort === "key") return -dir * a.key.localeCompare(b.key);
+    if (auditSort === "size") return dir * (a.w * a.h - b.w * b.h);
+    if (auditSort === "alpha") return dir * (a.partial - b.partial);
+    return dir * ((a.colors - a.budget) - (b.colors - b.budget));
+  });
+}
+function renderAudit() {
+  const rows = auditFiltered();
+  const all = auditRows || [];
+  const bad = all.filter(auditProblem).length;
+  const n = f => all.filter(f).length;
+  const parts = [];
+  if (n(r => r.over)) parts.push(n(r => r.over) + " over the CI4 palette");
+  if (n(r => r.odd)) parts.push(n(r => r.odd) + " odd width");
+  if (n(r => r.partial > 0)) parts.push(n(r => r.partial > 0) + " soft alpha");
+  if (n(r => r.tmem)) parts.push(n(r => r.tmem) + " multi-tile");
+  if (n(r => r.gap)) parts.push(n(r => r.gap) + " with missing frames");
+  $("auditSum").textContent = all.length + " scanned — " +
+    (parts.length ? parts.join(" · ") : "nothing to flag") +
+    (rows.length !== all.length ? "   (" + rows.length + " shown)" : "");
+  const cols = [["key", "asset"], ["size", "size"], ["colors", "CI4 palette"],
+                ["alpha", "soft alpha"], ["", "what the bake does"], ["", ""]];
+  let html = "<table class='audit'><thead><tr><th></th>";
+  for (const c of cols) {
+    const on = c[0] && c[0] === auditSort;
+    html += "<th data-sort='" + c[0] + "'" + (on ? " class='on'" : "") + ">" + c[1] +
+      (on ? (auditDesc ? " ▾" : " ▴") : "") + "</th>";
+  }
+  html += "</tr></thead><tbody>";
+  if (!rows.length) {
+    html += "<tr><td colspan='7' style='color:var(--dim);padding:12px'>" +
+      (auditRows ? "nothing matches that filter - which is good news" : "not scanned yet") +
+      "</td></tr>";
+  }
+  for (const r of rows.slice(0, 400)) {
+    let badges =
+      (r.over ? "<span class='badge b-col'>merges " + (r.colors - r.budget) + " colors</span>" : "") +
+      (r.odd ? "<span class='badge b-odd'>pads odd width</span>" : "") +
+      (r.partial ? "<span class='badge b-alpha'>alpha to on/off</span>" : "") +
+      (r.tmem ? "<span class='badge b-odd'>splits into tiles</span>" : "") +
+      (r.gap ? "<span class='badge b-gap'>frame " + r.gap.join(",") + " missing</span>" : "");
+    if (!badges) badges = "<span class='badge b-ok'>bakes unchanged</span>";
+    html += "<tr>" +
+      "<td><img class='audit-thumb' loading='lazy' src='" + assetURL(r.key) + "' alt=''></td>" +
+      "<td class='nm' data-key='" + r.key + "'>" + r.key + "</td>" +
+      "<td>" + r.w + "x" + r.h + "</td>" +
+      "<td" + (r.over ? " style='color:var(--bad)'" : "") + ">" + r.colors + " / " + r.budget + "</td>" +
+      "<td>" + (r.partial || "") + "</td>" +
+      "<td>" + badges + "</td>" +
+      "<td>" + (r.over ? "<button class='fix' data-fix='" + r.key +
+        "' title='open it with its own best 16 colors applied, ready to check'>fit it</button>" : "") +
+      "</td></tr>";
+  }
+  html += "</tbody></table>";
+  if (rows.length > 400) {
+    html += "<div style='color:var(--dim);font-size:11px;padding:8px'>showing the first 400 of " +
+      rows.length + " - narrow the filter, or hit export for the full list as CSV</div>";
+  }
+  $("auditList").innerHTML = html;
+  const list = $("auditList");
+  list.querySelectorAll("th[data-sort]").forEach(th => {
+    if (!th.dataset.sort) return;
+    th.onclick = () => {
+      if (auditSort === th.dataset.sort) auditDesc = !auditDesc;
+      else { auditSort = th.dataset.sort; auditDesc = true; }
+      renderAudit();
+    };
+  });
+  list.querySelectorAll("td.nm").forEach(td => {
+    td.onclick = () => { closeAudit(); openAsset(td.dataset.key); };
+  });
+  list.querySelectorAll("button[data-fix]").forEach(b => {
+    b.onclick = () => fixAsset(b.dataset.fix);
+  });
+}
+function openAudit() {
+  $("auditWrap").hidden = false;
+  if (!auditRows) { $("auditList").innerHTML = ""; runAudit(); }
+  else renderAudit();
+}
+function closeAudit() { $("auditWrap").hidden = true; }
+function auditCsv() {
+  if (!auditRows) return say("run the scan first", "bad");
+  const rows = auditFiltered();
+  const head = "asset,width,height,colors,ci4_budget,over_budget,soft_alpha_px," +
+    "odd_width,multi_tile,missing_frames";
+  const body = rows.map(r => [r.key, r.w, r.h, r.colors, r.budget, r.over ? 1 : 0,
+    r.partial, r.odd ? 1 : 0, r.tmem ? 1 : 0, r.gap ? r.gap.join(" ") : ""].join(","));
+  const a = document.createElement("a");
+  a.download = "asset-audit.csv";
+  a.href = URL.createObjectURL(new Blob([[head].concat(body).join("\n")], { type: "text/csv" }));
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  say("exported " + rows.length + " rows to asset-audit.csv", "ok");
+}
+
+/* ---- colors you actually reached for, kept to hand ---- */
+const RECENT_MAX = 12;
+let recent = [];
+function noteRecent(hex) {
+  hex = hex.toLowerCase();
+  recent = [hex].concat(recent.filter(c => c !== hex)).slice(0, RECENT_MAX);
+  renderRecent();
+  savePrefs();
+}
+function renderRecent() {
+  const box = $("recent");
+  box.innerHTML = "";
+  for (const c of recent) {
+    const sw = document.createElement("span");
+    sw.className = "sw";
+    sw.style.background = c;
+    sw.dataset.c = c;
+    sw.title = c + "  (click to use again)";
+    sw.onclick = () => setColor(c);
+    box.appendChild(sw);
+  }
+}
+
+/* ---- the eight stores hold the same 148 names, so one drawing often belongs
+   in several of them; tick the extras and one save writes them all ---- */
+function buildMultiTargets() {
+  const box = $("multiTargets");
+  const checked = new Set(multiTargets());
+  box.innerHTML = "";
+  const groups = [...$("saveTarget").options].map(o => o.value);
+  const primary = $("saveTarget").value;
+  const name = $("fname").value.trim();
+  for (const g of groups) {
+    if (g === primary) continue;
+    const has = name && !!assetURL(g + "/" + name);
+    const lab = document.createElement("label");
+    lab.className = "chk" + (has ? " has" : "");
+    lab.title = has ? g + " already has " + name + " - saving replaces it"
+                    : g + " has no " + name + " yet";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = g;
+    cb.checked = checked.has(g);
+    cb.onchange = () => { updateMultiNote(); updateSavePath(); };
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(g));
+    box.appendChild(lab);
+  }
+  updateMultiNote();
+}
+function updateMultiNote() {
+  const n = multiTargets().length;
+  $("multiNote").textContent = n
+    ? "(" + n + " extra, a dot means that store already has this name)"
+    : "(a dot means that store already has this name)";
+}
+function multiTargets() {
+  return [...$("multiTargets").querySelectorAll("input:checked")].map(cb => cb.value);
+}
+
+/* ---- audit: keep it honest, and let a row be fixed in one click ---- */
+function invalidateAudit() {
+  auditRows = null;
+  if (!$("auditWrap").hidden) renderAudit();
+}
+/* open an over-budget asset with its own best 16 colors already applied, left
+   unsaved so it can be looked at before it replaces anything */
+function fixAsset(key) {
+  closeAudit();
+  openAsset(key, () => {
+    const info = analyze();
+    if (!info.colors.length) return say("that asset is empty", "warn");
+    const budget = info.transparent ? 15 : 16;
+    if (info.colors.length <= budget) return say(key + " already fits the palette", "ok");
+    /* This borrows the swatches to show the asset's own colors. It deliberately
+       does NOT savePrefs(): the palette you assembled is yours, and a repair on
+       one asset should not quietly overwrite it on disk. "restore mine" brings
+       it back. */
+    stashPalette();
+    PALETTE = medianCut(info.colors, budget).map(c => rgb2hex([q5(c[0]), q5(c[1]), q5(c[2])]));
+    renderPalette();
+    const pal = PALETTE.map(hex2rgb);
+    snapshot("fit to " + budget + " colors");
+    for (let i = 0; i < pix.length; i += 4) {
+      if (pix[i + 3] === 0) continue;
+      const c = nearestIn(pal, pix[i], pix[i + 1], pix[i + 2]);
+      pix[i] = c[0]; pix[i + 1] = c[1]; pix[i + 2] = c[2];
+    }
+    repaint();
+    say("cut " + key + " from " + info.colors.length + " colors to " + PALETTE.length +
+        " - check it, then save (or undo)", "warn");
+  });
+}
+
+/* ---- the palette you built is yours; borrowed palettes are restorable ---- */
+let stashedPalette = null;
+function stashPalette() {
+  stashedPalette = PALETTE.slice();
+  $("bPalRestore").hidden = false;
+}
+function restorePalette() {
+  if (!stashedPalette) return;
+  PALETTE = stashedPalette.slice();
+  stashedPalette = null;
+  $("bPalRestore").hidden = true;
+  renderPalette();
+  savePrefs();
+  say("put your palette back", "ok");
+}
+
+/* ---- what the big canvas is showing ----
+   The baked preview is 64 px wide; judging whether a 300-colour wall survives
+   CI4 needs it at working size, next to the original. "changes" answers the
+   other question: what have I actually touched since I opened this? */
+const viewMode = () => $("viewMode").value;
+function diffPixels() {
+  const out = new Uint8ClampedArray(pix.length);
+  if (!refPix || !refMeta || refMeta.w !== W || refMeta.h !== H) return pix;
+  for (let i = 0; i < pix.length; i += 4) {
+    const same = pix[i] === refPix[i] && pix[i + 1] === refPix[i + 1] &&
+                 pix[i + 2] === refPix[i + 2] && pix[i + 3] === refPix[i + 3];
+    if (same) {                                   /* untouched: a dim ghost */
+      const l = Math.round((pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114) * 0.4);
+      out[i] = out[i + 1] = out[i + 2] = l;
+      out[i + 3] = pix[i + 3] ? 110 : 0;
+    } else if (pix[i + 3] === 0) {                /* rubbed out: mark the hole */
+      out[i] = 224; out[i + 1] = 103; out[i + 2] = 103; out[i + 3] = 130;
+    } else {                                      /* painted: full strength */
+      out[i] = pix[i]; out[i + 1] = pix[i + 1]; out[i + 2] = pix[i + 2]; out[i + 3] = 255;
+    }
+  }
+  return out;
+}
+function countChanged() {
+  if (!refPix || !refMeta || refMeta.w !== W || refMeta.h !== H) return null;
+  let n = 0;
+  for (let i = 0; i < pix.length; i += 4) {
+    if (pix[i] !== refPix[i] || pix[i + 1] !== refPix[i + 1] ||
+        pix[i + 2] !== refPix[i + 2] || pix[i + 3] !== refPix[i + 3]) n++;
+  }
+  return n;
+}
+function viewPixels() {
+  const m = viewMode();
+  if (m === "baked") return bakeCompute($("fmtSel").value, $("dither").checked);
+  if (m === "changes") return diffPixels();
+  return pix;
+}
+function updateViewNote() {
+  const m = viewMode();
+  const el = $("viewNote");
+  if (m === "baked") {
+    el.textContent = "showing the " + $("fmtSel").value.toUpperCase() +
+      " result - drawing is off until you switch back";
+    el.style.color = "var(--warn)";
+  } else if (m === "changes") {
+    const n = countChanged();
+    el.textContent = n === null
+      ? "nothing to compare against - this canvas was not opened from an asset"
+      : n === 0 ? "no pixels changed since you opened it"
+      : n + " pixel" + (n === 1 ? "" : "s") + " changed - drawing is off until you switch back";
+    el.style.color = n ? "var(--acc)" : "var(--dim)";
+  } else {
+    el.textContent = "";
+  }
+}
+function setView(m) {
+  $("viewMode").value = m;
+  updateViewNote();
+  repaint();
+}
+function cycleView() {
+  const order = ["edit", "baked", "changes"];
+  setView(order[(order.indexOf(viewMode()) + 1) % order.length]);
+}
+
 /* ==================== telling the user what is going on ==================== */
 const TOOL_HINTS = {
   pen:     "drag to draw &middot; <span class='k'>right-click</span> erases &middot; <span class='k'>Alt</span> picks a color",
@@ -1503,6 +2029,16 @@ function updateSavePath() {
                "<span class='path'>" + dir + "</span>") +
     (exists ? " &mdash; <span class='over'>replaces the asset already there</span>"
             : " &mdash; nothing by that name yet, so this makes a new asset");
+  const extra = multiTargets();
+  if (extra.length) {
+    const dupes = extra.filter(g => assetURL(g + "/" + name)).length;
+    el.innerHTML += "<br>plus <b>" + extra.length + " more store" +
+      (extra.length > 1 ? "s" : "") + "</b> (" + extra.join(", ") + ")" +
+      (dupes ? " &mdash; <span class='over'>" + dupes +
+        (dupes === 1 ? " of them already has a " : " of them already have a ") +
+        name + "</span>" : "") +
+      (gameDir ? "" : " &mdash; <span class='over'>needs the game folder connected</span>");
+  }
 }
 /* an unsaved canvas should never be a surprise */
 function updateDirtyUI() {
@@ -1510,7 +2046,7 @@ function updateDirtyUI() {
   const nm = $("fname").value.trim();
   document.title = (dirty ? "● " : "") + "N64 Asset Editor" + (nm ? " — " + nm : "");
 }
-function updateStatusPanels() { updateSavePath(); updateDirtyUI(); }
+function updateStatusPanels() { buildMultiTargets(); updateSavePath(); updateDirtyUI(); }
 
 /* ============================ persistence ============================ */
 const LS = { session: "n64ae.session", prefs: "n64ae.prefs" };
@@ -1519,7 +2055,7 @@ function savePrefs() {
     localStorage.setItem(LS.prefs, JSON.stringify({
       palette: PALETTE, gameRoot: $("gameRoot").value, fmt: $("fmtSel").value,
       dither: $("dither").checked, lock: $("lockPal").checked, grid: $("showGrid").checked,
-      fps: $("fps").value
+      fps: $("fps").value, tile: $("tilePv").checked, recent: recent
     }));
   } catch (e) { /* quota or private mode - not worth bothering the user */ }
 }
@@ -1533,6 +2069,8 @@ function loadPrefs() {
   if (typeof p.dither === "boolean") $("dither").checked = p.dither;
   if (typeof p.lock === "boolean") $("lockPal").checked = p.lock;
   if (typeof p.grid === "boolean") $("showGrid").checked = p.grid;
+  if (typeof p.tile === "boolean") $("tilePv").checked = p.tile;
+  if (Array.isArray(p.recent)) recent = p.recent.filter(isValidHex).slice(0, RECENT_MAX);
   if (p.fps) { $("fps").value = p.fps; $("fpsLab").textContent = p.fps + " fps"; }
 }
 function autosave() {
@@ -1584,6 +2122,24 @@ $("bAddSw").onclick = () => {
   if (PALETTE.includes(c)) return say("already in the palette");
   PALETTE.push(c); savePrefs(); renderPalette();
 };
+$("bMapPal").onclick = () => {
+  if (!PALETTE.length) return say("the palette is empty - add some colors first", "bad");
+  const pal = PALETTE.map(hex2rgb);
+  snapshot("map to palette");
+  let changed = 0;
+  for (let i = 0; i < pix.length; i += 4) {
+    if (pix[i + 3] === 0) continue;
+    const c = nearestIn(pal, pix[i], pix[i + 1], pix[i + 2]);
+    if (pix[i] !== c[0] || pix[i + 1] !== c[1] || pix[i + 2] !== c[2]) changed++;
+    pix[i] = c[0]; pix[i + 1] = c[1]; pix[i + 2] = c[2];
+  }
+  repaint();
+  say(changed
+    ? "remapped " + changed + " pixels onto the " + PALETTE.length + "-color palette"
+    : "every pixel was already on the palette", "ok");
+};
+$("viewMode").onchange = () => setView($("viewMode").value);
+$("bPalRestore").onclick = restorePalette;
 $("bPalReset").onclick = () => { PALETTE = DEFAULT_PALETTE.slice(); savePrefs(); renderPalette(); };
 $("bExtract").onclick = () => {
   const { colors, transparent } = analyze();
@@ -1702,7 +2258,10 @@ $("gameRoot").oninput = () => { $("bakeCmd").textContent = bakeCmd(); savePrefs(
 $("bCopyCmd").onclick = () => navigator.clipboard.writeText(bakeCmd())
   .then(() => say("bake command copied", "ok"), () => say("clipboard blocked", "bad"));
 
-$("fmtSel").onchange = () => { savePrefs(); bakedRender(); };
+$("fmtSel").onchange = () => {
+  savePrefs(); bakedRender();
+  if (viewMode() === "baked") { updateViewNote(); repaint(); }
+};
 $("dither").onchange = () => { savePrefs(); bakedRender(); };
 $("bApplyBake").onclick = () => {
   snapshot("apply " + $("fmtSel").value.toUpperCase());
@@ -1711,32 +2270,59 @@ $("bApplyBake").onclick = () => {
   say("canvas replaced with the " + $("fmtSel").value.toUpperCase() + " result", "ok");
 };
 
-$("zIn").onclick = () => { ZOOM = clamp(ZOOM + 1, 1, 48); syncZoomLabel(); repaint(); };
-$("zOut").onclick = () => { ZOOM = clamp(ZOOM - 1, 1, 48); syncZoomLabel(); repaint(); };
+$("zIn").onclick = () => zoomAround(ZOOM + 1);
+$("zOut").onclick = () => zoomAround(ZOOM - 1);
 $("zFit").onclick = () => { zoomFit(); repaint(); };
 ["showGrid", "showRef", "showOnion"].forEach(id => $(id).onchange = () => { savePrefs(); repaint(); });
 
 $("fname").oninput = () => { refreshAnim(); updateStatusPanels(); };
-$("saveTarget").onchange = () => { refreshAnim(); updateSavePath(); };
+$("saveTarget").onchange = () => { refreshAnim(); updateStatusPanels(); };
 $("bPlay").onclick = () => animTimer ? stopAnim() : playAnim();
 $("bPrevF").onclick = () => stepFrame(-1);
 $("bNextF").onclick = () => stepFrame(1);
+$("bOpenFrame").onclick = openPreviewedFrame;
+$("tilePv").onchange = () => { savePrefs(); drawPreview(); };
 $("fps").oninput = e => {
   $("fpsLab").textContent = e.target.value + " fps";
   savePrefs();
   if (animTimer) playAnim();
 };
+$("bAudit").onclick = openAudit;
+$("bAuditClose").onclick = closeAudit;
+$("bAuditCsv").onclick = auditCsv;
+$("bAuditRescan").onclick = () => { auditRows = null; $("auditList").innerHTML = ""; runAudit(); };
+$("auditFilter").onchange = renderAudit;
+$("auditWrap").onclick = e => { if (e.target === $("auditWrap")) closeAudit(); };
+
 $("group").onchange = paintGallery;
 $("search").oninput = paintGallery;
 $("gallery").addEventListener("scroll", scheduleThumbs, { passive: true });
 window.addEventListener("scroll", scheduleThumbs, { passive: true });
 
 /* ctrl+wheel zooms, like every other pixel editor */
+/* Ctrl+wheel zooms around the pointer; plain zoom keeps the view centre.
+   Without this, zooming in on a detail throws it off screen. */
+function zoomAround(newZoom, clientX, clientY) {
+  newZoom = clamp(newZoom, 1, 48);
+  if (newZoom === ZOOM) return;
+  const wrap = $("cwrap");
+  const r = cv.getBoundingClientRect();
+  /* anchor in canvas-local pixels: the pointer, or the middle of the view */
+  const ax = clientX == null ? wrap.scrollLeft + wrap.clientWidth / 2 : clientX - r.left;
+  const ay = clientY == null ? wrap.scrollTop + wrap.clientHeight / 2 : clientY - r.top;
+  const fx = ax / ZOOM, fy = ay / ZOOM;         /* image pixel under the anchor */
+  const vx = ax - wrap.scrollLeft;              /* where it sits inside the view */
+  const vy = ay - wrap.scrollTop;
+  ZOOM = newZoom;
+  syncZoomLabel();
+  repaint();
+  wrap.scrollLeft = fx * ZOOM - vx;             /* put that pixel back under it */
+  wrap.scrollTop = fy * ZOOM - vy;
+}
 $("cwrap").addEventListener("wheel", e => {
   if (!e.ctrlKey) return;
   e.preventDefault();
-  ZOOM = clamp(ZOOM + (e.deltaY < 0 ? 1 : -1), 1, 48);
-  syncZoomLabel(); repaint();
+  zoomAround(ZOOM + (e.deltaY < 0 ? 1 : -1), e.clientX, e.clientY);
 }, { passive: false });
 
 document.addEventListener("keydown", e => {
@@ -1767,17 +2353,21 @@ document.addEventListener("keydown", e => {
     }
     return;
   }
+  if (k === "v") { cycleView(); return; }
   const tools = { b: "pen", e: "eraser", l: "line", r: "rect", o: "ellipse", g: "fill", i: "pick", m: "select" };
   if (tools[k]) { setTool(tools[k]); return; }
   if (k === "delete" || k === "backspace") { e.preventDefault(); $("bClear").onclick(); return; }
-  if (k === "escape") { sel = null; repaint(); return; }
+  if (k === "escape") {
+    if (!$("auditWrap").hidden) { closeAudit(); return; }
+    sel = null; repaint(); return;
+  }
   if (k === "[") { $("brush").value = brush = clamp(brush - 1, 1, 8); $("brushLab").textContent = brush + " px"; return; }
   if (k === "]") { $("brush").value = brush = clamp(brush + 1, 1, 8); $("brushLab").textContent = brush + " px"; return; }
   if (k === "+" || k === "=") { $("zIn").onclick(); return; }
   if (k === "-") { $("zOut").onclick(); return; }
   if (k === "0") { $("zFit").onclick(); return; }
-  if (k === ",") { stepFrame(-1); return; }
-  if (k === ".") { stepFrame(1); return; }
+  if (k === "," || k === "<") { stepFrame(-1); if (e.shiftKey) openPreviewedFrame(); return; }
+  if (k === "." || k === ">") { stepFrame(1); if (e.shiftKey) openPreviewedFrame(); return; }
   const step = e.shiftKey ? 8 : 1;
   if (k === "arrowleft") { e.preventDefault(); nudge(-step, 0); }
   else if (k === "arrowright") { e.preventDefault(); nudge(step, 0); }
@@ -1802,6 +2392,7 @@ window.addEventListener("resize", () => {
 /* ============================ boot ============================ */
 loadPrefs();
 renderPalette();
+renderRecent();
 updateToolHint();
 brush = +$("brush").value;
 buildGroups();

@@ -27,6 +27,11 @@ One HTML file, no dependencies, no server — open it and draw.
 Connected to the folder, **rescan** re-reads every PNG from disk, so the gallery
 shows what is actually on disk rather than the snapshot taken at build time.
 
+All eight stores hold the same 148 names, so one drawing usually belongs in
+several of them. Tick the extras under **also save into** and a single save
+writes them all; a dot next to a store means it already has an asset by that
+name, so you can see what you are about to replace before you do it.
+
 ## Drawing
 
 Pen, eraser, line, rect, ellipse, flood fill, eyedropper, and a rectangular
@@ -43,7 +48,14 @@ gaps. Brush 1–8 px.
 
 Arrow keys nudge. With nothing selected the nudge **wraps**, which is how you
 line up a seamless floor/wall tile; with a selection it moves just that block.
-Shift+arrow moves 8 px. <kbd>Ctrl</kbd>+wheel zooms.
+Shift+arrow moves 8 px. <kbd>Ctrl</kbd>+wheel zooms **around the pointer**, so
+zooming into a detail keeps it under the cursor instead of flinging it off
+screen.
+
+Tick **tile 3x3** under the preview and the image repeats in a 3x3 grid — the
+only honest way to tell whether a floor, wall or ceiling texture actually meets
+itself. Pair it with the wrapping nudge to slide a pattern until the seam
+disappears.
 
 ## Knowing what you are about to do
 
@@ -66,6 +78,24 @@ The editor tries to answer "what will this actually do?" before you commit to it
 - Undo says what it reversed (*undid fill (3 more)*), because every history
   entry is labelled with the action that created it.
 
+## Three ways to look at the canvas
+
+The dropdown in the canvas toolbar (or <kbd>V</kbd>) switches what the big
+canvas shows:
+
+- **edit** — the image, as normal.
+- **as baked** — the CI4/IA8/RGBA16 result at working size. The little preview
+  is 64 px wide; deciding whether a 300-colour wall survives quantization needs
+  it big, and this is the same pixels you would ship.
+- **changes only** — everything you have altered since opening the asset at full
+  strength, everything untouched ghosted to grey, and a count: *116 pixels
+  changed*. Rubbed-out pixels show as red holes. It is how you proofread a
+  touch-up.
+
+The two review views are read-only, and say so if you try to draw in them,
+rather than quietly dropping the stroke. Middle-mouse drag pans the canvas at
+any zoom.
+
 ## Seeing the bake before you bake
 
 The *as baked* panel simulates what `mksprite` will do, so surprises show up
@@ -84,9 +114,51 @@ CI4's 2-pixels-per-byte packing, the byte cost against a 4 KB TMEM load, and any
 size change from the asset you opened. **apply** bakes the result into the
 canvas so what you draw is exactly what ships.
 
-*from image* pulls the image's own 16 quantized colors into the palette, and
-**lock** snaps every stroke to the nearest palette entry — the reliable way to
-stay inside the CI4 budget while drawing.
+Colours you draw with collect in a **recently used** strip, so getting back to
+one is a click rather than a hunt.
+
+When **fit it** borrows the swatches to show an asset's own colours, it does not
+overwrite the palette you assembled — a **restore mine** button appears to put
+yours back, and nothing is written to disk in the meantime.
+
+Three buttons cover the CI4 palette workflow:
+
+- **from image** pulls the image's own 16 quantized colors into the palette.
+- **lock** snaps every *new* stroke to the nearest palette entry.
+- **map image** snaps every pixel *already on the canvas* to the palette — the
+  fix when the panel says something like *120/16 colors, the bake will merge
+  some* and you would rather choose the 16 yourself than let mksprite choose.
+
+## Auditing the whole project
+
+The bake panel only ever describes the file you have open, so a project-wide
+problem stays invisible. **scan every asset** decodes all of them once and says
+what the bake will change:
+
+```
+1228 scanned - 981 over the CI4 palette · 16 odd width · 28 soft alpha
+
+  s1/flooraisle   64x64   334 / 16   merges 318 colors
+  s1/wall         64x64   307 / 16   merges 291 colors
+  s4/flooraisle   64x64   272 / 16   merges 256 colors
+  ...
+```
+
+Sort by any column, filter to one kind of problem, click a row to open that
+asset, or **export** the whole thing as CSV. **rescan** picks up anything you
+have saved since.
+
+Any row that is over budget gets a **fit it** button: it opens that asset with
+its own best 16 colours already applied, and leaves it *unsaved* so you can look
+at the damage, undo it, or keep it. That is deliberate — nothing rewrites your
+art behind your back. It also checks animation runs for
+holes — a `name1`, `name3` pair with no `name2` is a missing frame, and the
+game will notice even if you do not.
+
+Those numbers are from the sample project this was built against: **80% of its
+art is over the CI4 budget**, which means mksprite is quietly choosing the
+16 colours for most of it. Whether that matters is a judgement call, but you
+could not previously make that call without opening 1228 files by hand.
 
 ## Animation
 
@@ -95,6 +167,11 @@ trailing number (`tvstatic1`…`tvstatic6`). The editor finds the sequence aroun
 whatever you have open and gives you playback at 1–30 fps, frame stepping, and
 an **onion** ghost of the previous frame under the canvas. The frame you are
 editing plays live, so you see your change in motion before saving.
+
+Step to a frame with <kbd>,</kbd> / <kbd>.</kbd> and the **edit it** button
+names that frame; click it (or hold <kbd>Shift</kbd> while stepping) to open it
+for editing. That is how you work through an animation without hunting for each
+frame in the browser.
 
 **ref** ghosts the asset as it was when you opened it — handy for redrawing over
 existing art.
@@ -109,7 +186,7 @@ changes asks first, and **revert** restores the asset exactly as it was opened.
 
 ```
 node test/editor.test.js     # 79 assertions, no browser needed
-node test/browser.test.js    # 60 assertions, drives the real UI in headless Chrome
+node test/browser.test.js    # 123 assertions, drives the real UI in headless Chrome
 ```
 
 `editor.test.js` boots the editor's script against a small DOM stub — so a bad
@@ -119,8 +196,11 @@ drawing, selection, transform, resize, quantization and frame-detection logic.
 `browser.test.js` builds a small fixture page from the template and drives it in
 headless Chrome with real pointer and keyboard events: opening an asset from the
 gallery, lazy thumbnail loading, drawing a stroke, undo/redo, the marquee, the
-bake panel's warnings, transforms, revert, filename validation, and every
-readout described under *Knowing what you are about to do*. It skips itself (exit 0) when no
+bake panel's warnings, transforms, revert, filename validation, the tiled
+preview, frame-to-frame editing, palette remapping, pointer-anchored zoom, the
+audit report, and every readout described under *Knowing what you are about to
+do*. Its fixture carries one deliberate example of each problem the audit looks
+for, so the counts are exact rather than approximate. It skips itself (exit 0) when no
 Chrome or Edge is installed; set `CHROME=<path>` to point it somewhere else.
 
 Run both after editing `asset-editor.tpl.html`.
